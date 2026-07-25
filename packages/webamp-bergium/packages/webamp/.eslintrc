@@ -1,0 +1,63 @@
+{
+  "plugins": ["react", "import", "react-hooks"],
+  "settings": {
+    "react": {
+      "version": "15.2"
+    }
+  },
+  "globals": {
+    "window": true,
+    "document": true,
+    "console": true,
+    "navigator": true,
+    "alert": true,
+    "Blob": true,
+    "fetch": true,
+    "FileReader": true,
+    "Element": true,
+    "AudioNode": true,
+    "MutationObserver": true,
+    "Image": true,
+    "location": true
+  },
+  "rules": {
+    "no-multiple-empty-lines": [
+      "error",
+      {
+        "max": 2,
+        "maxEOF": 0,
+        "maxBOF": 0
+      }
+    ],
+    "lines-between-class-members": [
+      "warn",
+      "always",
+      { "exceptAfterSingleLine": true }
+    ],
+    "no-catch-shadow": "error",
+    "no-floating-decimal": "error",
+    "no-multi-spaces": "warn",
+    "no-native-reassign": "error",
+    "no-negated-in-lhs": "warn",
+    "no-spaced-func": "error",
+    "no-trailing-spaces": "error",
+    "react/no-string-refs": "error",
+    "react/jsx-boolean-value": "error",
+    "react/jsx-uses-react": "off",
+    "react/jsx-uses-vars": "error",
+    "react/prefer-es6-class": "error",
+    "react/jsx-pascal-case": "error",
+    "react/require-render-return": "error",
+    "react/self-closing-comp": "error",
+    "react/no-unescaped-entities": "error",
+    "import/default": "error",
+    "import/export": "error",
+    "import/first": "error",
+    "import/namespace": "error",
+    "import/no-duplicates": "error",
+    "import/no-extraneous-dependencies": "error",
+    "import/no-named-as-default-member": "error",
+    "react-hooks/rules-of-hooks": "error",
+    "react-hooks/exhaustive-deps": "error"
+  }
+}

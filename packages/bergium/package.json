@@ -1,0 +1,40 @@
+{
+  "name": "bergium-core",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Architecture scaffold for a Butterchurn-compatible multi-pipeline audio-reactive rendering engine",
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./preset-schema": "./src/presets/bergium-preset.schema.json"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit -p tsconfig.test.json",
+    "build": "tsc && bun run copy-glsl",
+    "copy-glsl": "cp -r src/pipelines/geiss/gpu/*.glsl dist/pipelines/geiss/gpu/ && cp -r src/pipelines/geiss/reference/*.glsl dist/pipelines/geiss/reference/ 2>/dev/null || true",
+    "test": "vitest run --project node",
+    "test:node": "vitest run --project node",
+    "test:oracle": "vitest run --project node tests/oracle",
+    "test:browser": "vitest run --project browser",
+    "test:all": "vitest run"
+  },
+  "dependencies": {
+    "ringbuf.js": "^0.4.0"
+  },
+  "devDependencies": {
+    "@types/node": "^26.1.1",
+    "@vitest/browser": "^4.1.10",
+    "@vitest/browser-playwright": "^4.1.10",
+    "butterchurn": "3.0.0-beta.5",
+    "playwright": "^1.61.1",
+    "typescript": "^7.0.0",
+    "vitest": "^4.1.10"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

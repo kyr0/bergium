@@ -1,0 +1,16 @@
+{
+  "name": "bergium-monorepo",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "bun@1.2.0",
+  "workspaces": [
+    "apps/demo",
+    "packages/bergium"
+  ],
+  "scripts": {
+    "build:bergium": "bun run --filter bergium-core build",
+    "dev:demo": "bun run --filter bergium-demo dev",
+    "build:demo": "bun run --filter bergium-demo build"
+  }
+}

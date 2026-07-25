@@ -1,0 +1,64 @@
+{
+  "name": "ani-cursor",
+  "version": "0.0.5",
+  "description": "Render .ani cursors as CSS animations in the browser",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "files": [
+    "dist/",
+    "src/**/*.ts"
+  ],
+  "author": "Jordan Eldredge <jordan@jordaneldredge.com>",
+  "license": "MIT",
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/captbaritone/webamp.git",
+    "directory": "packages/ani-cursor"
+  },
+  "bugs": {
+    "url": "https://github.com/captbaritone/webamp/issues"
+  },
+  "homepage": "https://github.com/captbaritone/webamp/tree/master/packages/ani-cursor",
+  "scripts": {
+    "build": "tsc",
+    "type-check": "tsc --noEmit",
+    "lint": "eslint src --ext ts,js",
+    "test": "jest",
+    "prepublish": "tsc"
+  },
+  "devDependencies": {
+    "@babel/core": "^7.20.0",
+    "@babel/preset-env": "^7.20.2",
+    "@babel/preset-typescript": "^7.20.0",
+    "@swc/jest": "^0.2.24",
+    "@types/node": "^24.0.10",
+    "typescript": "^5.6.2"
+  },
+  "dependencies": {
+    "byte-data": "18.1.1",
+    "riff-file": "^1.0.3"
+  },
+  "jest": {
+    "modulePathIgnorePatterns": [
+      "dist"
+    ],
+    "testEnvironment": "jsdom",
+    "extensionsToTreatAsEsm": [".ts"],
+    "moduleNameMapper": {
+      "^(\\.{1,2}/.*)\\.js$": "$1"
+    },
+    "transform": {
+      "^.+\\.(t|j)sx?$": ["@swc/jest"]
+    }
+  }
+}

@@ -1,0 +1,14 @@
+dist/
+node_modules/
+coverage/
+*.log
+
+# Pinned reference sources, checked out at revisions recorded in docs/provenance.md.
+# Never imported by the build; kept locally for behavioral comparison only.
+vendor/
+
+packages/**/*.mp3
+
+.vitest-attachments/
+
+**/.DS_Store

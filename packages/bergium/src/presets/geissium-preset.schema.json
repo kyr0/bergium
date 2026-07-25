@@ -1,0 +1,277 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://bergium.dev/schema/preset-v1.json",
+  "title": "Bergium preset v1",
+  "oneOf": [
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "format",
+        "version",
+        "pipeline",
+        "name",
+        "simulation",
+        "profile",
+        "mode"
+      ],
+      "properties": {
+        "$schema": {
+          "type": "string",
+          "maxLength": 256
+        },
+        "format": {
+          "const": "bergium"
+        },
+        "version": {
+          "const": 1
+        },
+        "pipeline": {
+          "const": "geiss-classic"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "simulation": {
+          "$ref": "#/$defs/simulation"
+        },
+        "profile": {
+          "enum": [
+            "geiss-4.30-plugin-8bit",
+            "geiss-4.30-plugin-truecolor"
+          ]
+        },
+        "mode": {
+          "oneOf": [
+            {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 25
+            },
+            {
+              "const": "random"
+            }
+          ]
+        },
+        "options": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "modeFramesAt30Hz": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100000
+            },
+            "beatDetection": {
+              "type": "boolean"
+            },
+            "slideShift": {
+              "type": "boolean"
+            },
+            "syncColorToSound": {
+              "type": "boolean"
+            }
+          }
+        }
+      }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "format",
+        "version",
+        "pipeline",
+        "name",
+        "simulation",
+        "feedback",
+        "warp"
+      ],
+      "properties": {
+        "$schema": {
+          "type": "string",
+          "maxLength": 256
+        },
+        "format": {
+          "const": "bergium"
+        },
+        "version": {
+          "const": 1
+        },
+        "pipeline": {
+          "const": "geiss-3d"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "simulation": {
+          "$ref": "#/$defs/simulation"
+        },
+        "feedback": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "decay",
+            "format"
+          ],
+          "properties": {
+            "decay": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            },
+            "format": {
+              "enum": [
+                "intensity8",
+                "rgba8"
+              ]
+            }
+          }
+        },
+        "warp": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "strength"
+          ],
+          "properties": {
+            "kind": {
+              "enum": [
+                "zoom",
+                "rotate",
+                "vortex",
+                "ripple",
+                "perspective"
+              ]
+            },
+            "strength": {
+              "type": "number",
+              "minimum": -4,
+              "maximum": 4
+            }
+          }
+        },
+        "waveforms": {
+          "type": "array",
+          "maxItems": 16,
+          "items": {
+            "$ref": "#/$defs/emitter"
+          }
+        },
+        "particles": {
+          "type": "array",
+          "maxItems": 16,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "kind",
+              "layer",
+              "count"
+            ],
+            "properties": {
+              "kind": {
+                "enum": [
+                  "solar",
+                  "chaser",
+                  "point"
+                ]
+              },
+              "layer": {
+                "enum": [
+                  "pre-warp",
+                  "post-warp"
+                ]
+              },
+              "count": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 100000
+              }
+            }
+          }
+        },
+        "post": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "palette": {
+              "type": "string",
+              "maxLength": 128
+            },
+            "gamma": {
+              "type": "number",
+              "minimum": 0.1,
+              "maximum": 8
+            }
+          }
+        },
+        "text": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "layer"
+          ],
+          "properties": {
+            "layer": {
+              "enum": [
+                "feedback",
+                "overlay"
+              ]
+            }
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "simulation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "hz",
+        "seed"
+      ],
+      "properties": {
+        "hz": {
+          "type": "number",
+          "minimum": 1,
+          "maximum": 240
+        },
+        "seed": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 4294967295
+        }
+      }
+    },
+    "emitter": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "layer"
+      ],
+      "properties": {
+        "kind": {
+          "enum": [
+            "line",
+            "dots",
+            "spectrum"
+          ]
+        },
+        "layer": {
+          "enum": [
+            "pre-warp",
+            "post-warp"
+          ]
+        }
+      }
+    }
+  }
+}
