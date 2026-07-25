@@ -155,7 +155,7 @@ async function build() {
       sourcemap: true,
       ...bundleDesc.output,
     });
-    console.log(`✅ Completed ${bundleDesc.name}`);
+    console.log(`[OK] Completed ${bundleDesc.name}`);
   }
 
   await nextBatch();

@@ -27,7 +27,7 @@ const plot = (i: WaveRenderInput, x: number, y: number): void => {
 };
 
 /**
- * The waveform trace as ordered float points — the shared geometry oracle used by
+ * The waveform trace as ordered float points - the shared geometry oracle used by
  * both the CPU renderer and the GPU max-blend pass. Emission order and the cursor
  * recurrence (`.9/.1`, `.5/.5`) are identical to the original inline loops, so
  * `renderWave` (which plots these) is unchanged. Waveform 7 is unreachable in the

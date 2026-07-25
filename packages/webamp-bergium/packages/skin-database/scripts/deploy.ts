@@ -50,7 +50,7 @@ function exec(command: string, description: string): void {
   try {
     execSync(command, { stdio: "inherit", shell: "/bin/bash" });
   } catch (error) {
-    log(`✗ Failed to ${description}`, "red");
+    log(`[X] Failed to ${description}`, "red");
     throw error;
   }
 }
@@ -60,7 +60,7 @@ function execSilent(command: string): string {
 }
 
 function detectCurrentDeployment(): DeploymentState {
-  log("→ Detecting current active deployment...", "cyan");
+  log("=> Detecting current active deployment...", "cyan");
 
   const apacheConfig = readFileSync(APACHE_CONFIG, "utf8");
   const isBlueActive = apacheConfig.includes(`localhost:${BLUE_PORT}`);
@@ -131,7 +131,7 @@ async function promptForConfirmation(
 function switchApacheConfig(state: DeploymentState): void {
   const colorCode = state.newColor === "blue" ? colors.blue : colors.green;
   log(
-    `→ Switching production to ${colorCode}${state.newColor}${colors.reset}...`,
+    `=> Switching production to ${colorCode}${state.newColor}${colors.reset}...`,
     "cyan"
   );
   log("  Updating Apache configuration...", "cyan");
@@ -149,7 +149,7 @@ function switchApacheConfig(state: DeploymentState): void {
   // Reload Apache
   exec("sudo systemctl reload apache2", "reload Apache");
 
-  log("✓ Apache configuration updated and reloaded", "cyan");
+  log("[OK] Apache configuration updated and reloaded", "cyan");
   logBlank();
 
   // Verify the change
@@ -164,7 +164,7 @@ function restoreBackup(): void {
   const backupPath = `${APACHE_CONFIG}.backup`;
   exec(`sudo cp "${backupPath}" "${APACHE_CONFIG}"`, "restore backup");
   exec("sudo systemctl reload apache2", "reload Apache");
-  log("✓ Backup restored", "yellow");
+  log("[OK] Backup restored", "yellow");
 }
 
 async function main(): Promise<void> {
@@ -178,39 +178,39 @@ async function main(): Promise<void> {
     const state = detectCurrentDeployment();
 
     // Step 2: Pull from GitHub
-    log("→ Pulling latest code from GitHub...", "cyan");
+    log("=> Pulling latest code from GitHub...", "cyan");
     exec("git pull --rebase origin master", "pull from GitHub");
-    log("✓ Code updated", "cyan");
+    log("[OK] Code updated", "cyan");
     logBlank();
 
     // Step 3: Ensure correct Node version
-    log("→ Ensuring correct Node version...", "cyan");
+    log("=> Ensuring correct Node version...", "cyan");
     exec(
       "source ~/.nvm/nvm.sh && nvm install",
       "ensure correct Node version from .nvmrc"
     );
-    log("✓ Node version verified", "cyan");
+    log("[OK] Node version verified", "cyan");
     logBlank();
 
     // Step 4: Install dependencies
-    log("→ Installing dependencies...", "cyan");
+    log("=> Installing dependencies...", "cyan");
     exec(
       "source ~/.nvm/nvm.sh && nvm exec yarn install --frozen-lockfile",
       "install dependencies"
     );
-    log("✓ Dependencies installed", "cyan");
+    log("[OK] Dependencies installed", "cyan");
     logBlank();
 
     // Step 5: Build the site
-    log("→ Building the site...", "cyan");
+    log("=> Building the site...", "cyan");
     exec("source ~/.nvm/nvm.sh && nvm exec yarn build", "build the site");
-    log("✓ Build complete", "cyan");
+    log("[OK] Build complete", "cyan");
     logBlank();
 
     // Step 5: Deploy to inactive instance
     const newColorCode = state.newColor === "blue" ? colors.blue : colors.green;
     log(
-      `→ Restarting ${newColorCode}${state.newColor}${colors.reset} instance...`,
+      `=> Restarting ${newColorCode}${state.newColor}${colors.reset} instance...`,
       "cyan"
     );
     exec(
@@ -218,13 +218,13 @@ async function main(): Promise<void> {
       `restart ${state.newColor} instance`
     );
     log(
-      `✓ ${newColorCode}${state.newColor}${colors.reset} instance restarted`,
+      `[OK] ${newColorCode}${state.newColor}${colors.reset} instance restarted`,
       "cyan"
     );
     logBlank();
 
     // Wait for the service to start
-    log("→ Waiting for service to be ready...", "cyan");
+    log("=> Waiting for service to be ready...", "cyan");
     await new Promise((resolve) => {
       setTimeout(resolve, 5000);
     });
@@ -237,12 +237,12 @@ async function main(): Promise<void> {
 
     if (isRunning) {
       log(
-        `✓ ${newColorCode}${state.newColor}${colors.reset} instance is running`,
+        `[OK] ${newColorCode}${state.newColor}${colors.reset} instance is running`,
         "cyan"
       );
     } else {
       log(
-        `✗ ${newColorCode}${state.newColor}${colors.reset} instance failed to start!`,
+        `[X] ${newColorCode}${state.newColor}${colors.reset} instance failed to start!`,
         "red"
       );
       log(`  Check PM2 logs: pm2 logs skin-database-${state.newColor}`, "red");
@@ -257,7 +257,7 @@ async function main(): Promise<void> {
     );
 
     if (!confirmed) {
-      log("✗ Deployment cancelled!", "red");
+      log("[X] Deployment cancelled!", "red");
       log(
         `  The ${newColorCode}${state.newColor}${colors.reset} instance is running but not active in production.`
       );
@@ -293,7 +293,7 @@ async function main(): Promise<void> {
       error instanceof Error &&
       error.message === "Configuration update verification failed"
     ) {
-      log("✗ Configuration update failed!", "red");
+      log("[X] Configuration update failed!", "red");
       restoreBackup();
     }
     process.exit(1);

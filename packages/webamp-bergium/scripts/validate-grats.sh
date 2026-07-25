@@ -27,5 +27,5 @@ if [ -n "$CHANGES" ]; then
     git diff packages/skin-database/api/graphql/
     exit 1
 else
-    echo "✅ Grats generated files are up-to-date"
+    echo "[OK] Grats generated files are up-to-date"
 fi

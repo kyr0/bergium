@@ -3,7 +3,7 @@ import { getRNG } from "./rngContext.js";
 import type { RNGContext } from "./seededRandom.js";
 
 /**
- * PresetEquationRunner (JS evaluator) — runs a preset's compiled JS equations
+ * PresetEquationRunner (JS evaluator) - runs a preset's compiled JS equations
  * (init/frame/pixel + per-shape/per-wave) and manages q/t/reg + user-var carry
  * between frames.
  *

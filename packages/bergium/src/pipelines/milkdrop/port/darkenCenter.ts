@@ -1,7 +1,7 @@
 import ShaderUtils from "./shaderUtils.js";
 
 /**
- * DarkenCenter — a small radial-gradient sprite that darkens the screen center.
+ * DarkenCenter - a small radial-gradient sprite that darkens the screen center.
  *
  * Mechanical TypeScript port of vendor/butterchurn/src/rendering/sprites/darkenCenter.js
  * (pinned revision fbac2f6). NOTE: the vendored file mis-names its class

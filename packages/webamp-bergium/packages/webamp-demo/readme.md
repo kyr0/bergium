@@ -1,6 +1,6 @@
 # Webamp.org
 
-> **Note:** This package is the source for the [webamp.org](https://webamp.org) demo site. It is not a good reference for how to use Webamp in your own project — it relies on private internal APIs and imports library source directly. For examples of how to use Webamp as a consumer, see the [examples](../../examples/) directory or the [documentation site](https://docs.webamp.org).
+> **Note:** This package is the source for the [webamp.org](https://webamp.org) demo site. It is not a good reference for how to use Webamp in your own project - it relies on private internal APIs and imports library source directly. For examples of how to use Webamp as a consumer, see the [examples](../../examples/) directory or the [documentation site](https://docs.webamp.org).
 
 The demo site uses the same interface as the NPM module but adds the following functionality by utilizing Webamp's public API
 

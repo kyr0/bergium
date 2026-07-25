@@ -1,7 +1,7 @@
 import ShaderUtils from "./shaderUtils.js";
 
 /**
- * ResampleShader — a fullscreen-quad texture resampler (generates mipmaps).
+ * ResampleShader - a fullscreen-quad texture resampler (generates mipmaps).
  *
  * Mechanical TypeScript port of vendor/butterchurn/src/rendering/shaders/resample.js
  * (pinned revision fbac2f6). Shader strings are frozen assets (plan non-goal).

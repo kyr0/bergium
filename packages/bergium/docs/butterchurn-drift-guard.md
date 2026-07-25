@@ -9,13 +9,13 @@ resource formats and blending behavior.
 
 - `createVisualizer(audioContext, canvas, opts)` owns an internal WebGL2 canvas
   and presents it to the caller's 2D canvas.
-- Default internal size is 1200×900; default mesh is 48×36.
+- Default internal size is 1200x900; default mesh is 48x36.
 - WebGL2 context flags are alpha/antialias/depth/stencil/premultiplied-alpha off.
 - Audio uses 512 delivered samples from a 1024-sample analyser window. Web Audio
   unsigned bytes are shifted to signed bytes; channel samples are averaged with
   the preceding sample and every second value is retained.
 - FFT input is the full 1024 signed-byte window. Bass/mid/treble boundaries are
-  20–320, 320–2800 and 2800–11025 Hz (rounded into bins as the source does).
+  20-320, 320-2800 and 2800-11025 Hz (rounded into bins as the source does).
 - Frame audio averages use attack/release rates 0.2/0.5; long average uses 0.9
   for the first 50 frames and 0.992 thereafter, adjusted by `rate^(30/fps)`.
 
@@ -35,7 +35,7 @@ resource formats and blending behavior.
 
 Texture wrap/filtering, mipmap generation timing, blur ratios
 `[(.5,.25),(.125,.125),(.0625,.0625)]`, shader math and GL blend functions are
-part of the golden contract. Do not “share” Geiss's palette, waveform, fixed
+part of the golden contract. Do not "share" Geiss's palette, waveform, fixed
 simulation clock or scalar feedback with this pipeline.
 
 ## Safe extraction seam

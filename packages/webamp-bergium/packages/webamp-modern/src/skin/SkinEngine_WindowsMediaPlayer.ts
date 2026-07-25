@@ -537,7 +537,7 @@ function decodeUTF16LE(binaryStr) {
  */
 function utf8Encode(unicodeString) {
   if (typeof unicodeString != "string")
-    throw new TypeError("parameter ‘unicodeString’ is not a string");
+    throw new TypeError("parameter 'unicodeString' is not a string");
   const utf8String = unicodeString
     .replace(
       /[\u0080-\u07ff]/g, // U+0080 - U+07FF => 2 bytes 110yyyyy, 10zzzzzz

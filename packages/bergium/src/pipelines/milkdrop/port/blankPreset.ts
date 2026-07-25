@@ -1,7 +1,7 @@
 import type { ButterchurnPreset, EqVars } from "./presetEquationRunner.js";
 
 /**
- * BlankPreset — the default MilkDrop preset.
+ * BlankPreset - the default MilkDrop preset.
  *
  * Mechanical TypeScript port of vendor/butterchurn/src/blankPreset.js (pinned
  * revision fbac2f6). The source repeats the same wave/shape baseVals four times

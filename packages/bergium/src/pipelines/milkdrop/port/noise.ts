@@ -1,7 +1,7 @@
 import { getRNG } from "./rngContext.js";
 
 /**
- * Noise — generates and binds 2D/3D noise textures for preset shaders.
+ * Noise - generates and binds 2D/3D noise textures for preset shaders.
  *
  * Mechanical TypeScript port of vendor/butterchurn/src/noise/noise.js (pinned
  * revision fbac6f6). Uses the seeded RNG; cubic interpolation for zoom levels.

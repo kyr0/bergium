@@ -2,7 +2,7 @@ import { getRNG } from "./rngContext.js";
 import type { RNGContext } from "./seededRandom.js";
 
 /**
- * BlendPattern — generates the preset-blend interpolation field (vertInfoA/C).
+ * BlendPattern - generates the preset-blend interpolation field (vertInfoA/C).
  *
  * Mechanical TypeScript port of vendor/butterchurn/src/rendering/blendPattern.js
  * (pinned revision fbac2f6). Pure (no DOM). Only substitution: a local `clamp`

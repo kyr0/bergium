@@ -5,7 +5,7 @@ import { getRNG } from "./rngContext.js";
 import type { RNGContext } from "./seededRandom.js";
 
 /**
- * WarpShader — the feedback-warp pass that samples the previous frame through the
+ * WarpShader - the feedback-warp pass that samples the previous frame through the
  * preset's warp shader program, with per-vertex UVs/colors and preset-image injection.
  *
  * Mechanical TypeScript port of vendor/butterchurn/src/rendering/shaders/warp.js

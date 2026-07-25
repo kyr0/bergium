@@ -17,7 +17,7 @@ export default defineConfig({
     sourcemap: true,
   },
   optimizeDeps: {
-    // butterchurn-presets is a CJS UMD webpack bundle — force Vite to pre-bundle it
+    // butterchurn-presets is a CJS UMD webpack bundle - force Vite to pre-bundle it
     include: ["butterchurn-presets"],
   },
 });

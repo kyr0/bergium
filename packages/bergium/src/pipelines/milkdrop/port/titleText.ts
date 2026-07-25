@@ -1,8 +1,8 @@
 import ShaderUtils from "./shaderUtils.js";
 
 /**
- * TitleText — renders the song-title animation (italic Times New Roman rasterized
- * to a Canvas2D texture, sampled through a wobbling 16×8 UV grid).
+ * TitleText - renders the song-title animation (italic Times New Roman rasterized
+ * to a Canvas2D texture, sampled through a wobbling 16x8 UV grid).
  *
  * Mechanical TypeScript port of vendor/butterchurn/src/rendering/text/titleText.js
  * (pinned revision fbac6f6). Browser-only (uses document + Canvas2D). GLSL frozen
@@ -165,7 +165,7 @@ export default class TitleText {
   }
 
   // based on https://github.com/mrdoob/three.js/blob/master/src/geometries/PlaneGeometry.js
-  /** Build the fixed 16×7 title-plane vertex grid + triangle indices. */
+  /** Build the fixed 16x7 title-plane vertex grid + triangle indices. */
   private buildPositions(): void {
     const width = 2;
     const height = 2;

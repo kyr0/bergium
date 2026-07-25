@@ -1,7 +1,7 @@
 import ShaderUtils from "./shaderUtils.js";
 
 /**
- * OutputShader — the final presentation pass (with optional FXAA).
+ * OutputShader - the final presentation pass (with optional FXAA).
  *
  * Mechanical TypeScript port of vendor/butterchurn/src/rendering/shaders/output.js
  * (pinned revision fbac2f6). FXAA shader is a frozen asset (plan non-goal).

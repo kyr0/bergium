@@ -5,7 +5,7 @@
  * (chasers, shade bobs); it advances by `1.6*min(1, 47/fps)` so simulation does
  * NOT speed up on high-FPS displays. `intframe` is a separate integer frame
  * counter (used by `intframe%11` clearframes, solar sin periods, etc.). Keeping
- * simulate() on this fixed clock — independent of present rate — is a core plan
+ * simulate() on this fixed clock - independent of present rate - is a core plan
  * invariant.
  */
 export interface FrameClock {

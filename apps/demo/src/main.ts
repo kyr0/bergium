@@ -1,5 +1,5 @@
 /**
- * Bergium Demo — milkdrop/geiss visualizer powered by bergium-core
+ * Bergium Demo - milkdrop/geiss visualizer powered by bergium-core
  *
  * Creates a full-screen canvas, initializes either the milkdrop pipeline
  * (TypeScript-native butterchurn port) or geiss pipeline (GPU frame graph),
@@ -15,9 +15,9 @@ import {
   GeissAdapter,
 } from "bergium-core";
 
-// ─── Inline milkdrop presets (CJS butterchurn-presets unavailable in Vite ESM) ─
+// --- Inline milkdrop presets (CJS butterchurn-presets unavailable in Vite ESM) -
 //
-// butterchurn.loadPreset does JSON.stringify → JSON.parse (deep-copy), which
+// butterchurn.loadPreset does JSON.stringify => JSON.parse (deep-copy), which
 // STRIPS all function properties. After parsing, it checks for init_eqs_str
 // (string equations) to decide the JS compile path. Therefore every preset
 // must provide BOTH function AND string versions of equations so that after
@@ -55,7 +55,7 @@ const makeShape = () => ({
   frame_eqs: (m: any): typeof m => m,
 });
 
-// Preset: Warped Grid — polar-coordinate warp with audio-reactive zoom
+// Preset: Warped Grid - polar-coordinate warp with audio-reactive zoom
 const presetWarpGrid = {
   name: "Warped Grid",
   baseVals: {
@@ -71,7 +71,7 @@ const presetWarpGrid = {
     darken: 0.0, echo_orient: 0.0, red_blue: 0.0,
   },
   init_eqs_str: "",
-  // Note: compiled as `new Function("a", "m.rkeys = ... return a;")` — uses `a` as parameter
+  // Note: compiled as `new Function("a", "m.rkeys = ... return a;")` - uses `a` as parameter
   frame_eqs_str: 'a.rkeys = ["warp"]; a.zoom = 1.0 + 0.02 * a.treb_att; a.warp = 0.1 + 0.2 * a.bass_att;',
   pixel_eqs_str: "a.warp = a.warp + a.rad * 0.2;",
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -106,7 +106,7 @@ const presetWarpGrid = {
   shapes: [makeShape(), makeShape(), makeShape(), makeShape()],
 } as unknown as LegacyMilkDropPreset;
 
-// Preset: Tunnel Vision — radial tunnel warp
+// Preset: Tunnel Vision - radial tunnel warp
 const presetTunnel = {
   name: "Tunnel Vision",
   baseVals: {
@@ -159,7 +159,7 @@ const presetTunnel = {
   shapes: [makeShape(), makeShape(), makeShape(), makeShape()],
 } as unknown as LegacyMilkDropPreset;
 
-// Preset: Rubik's Cube — geometric grid with slow rotation
+// Preset: Rubik's Cube - geometric grid with slow rotation
 const presetRubiks = {
   name: "Rubik's Cube",
   baseVals: {
@@ -213,7 +213,7 @@ const presetRubiks = {
   shapes: [makeShape(), makeShape(), makeShape(), makeShape()],
 } as unknown as LegacyMilkDropPreset;
 
-// ─── Preset loading from butterchurn-presets package ──────────────────────────
+// --- Preset loading from butterchurn-presets package --------------------------
 
 // Presets that are known to crash or render incorrectly (from vendor/milkymilky)
 const DISABLED_PRESET_NAMES = new Set([
@@ -250,7 +250,7 @@ const PRESETS: { label: string; preset: unknown }[] = [
     .map((name) => ({ label: name, preset: allPresets[name] })),
 ];
 
-// ─── DOM bootstrap ───────────────────────────────────────────────────────────
+// --- DOM bootstrap -----------------------------------------------------------
 
 const canvas = document.createElement("canvas");
 canvas.id = "visualizer-canvas";
@@ -263,7 +263,7 @@ canvas.style.cssText = `
 document.body.appendChild(canvas);
 document.body.style.cssText = "margin: 0; overflow: hidden; background: #000;";
 
-// ─── Audio setup (playlist — numerically sorted) ─────────────────────────────
+// --- Audio setup (playlist - numerically sorted) -----------------------------
 
 const PLAYLIST = [
   "/sample_data/1_fluctura-Springtime_Intro.mp3",
@@ -303,7 +303,7 @@ function playNextTrack(): void {
 // Auto-advance to next track when current one ends
 audio.addEventListener("ended", playNextTrack);
 
-// ─── Controls UI (DOM API — avoids innerHTML HTML-parsing edge cases) ─────────
+// --- Controls UI (DOM API - avoids innerHTML HTML-parsing edge cases) ---------
 
 /** Shared style constants for consistent look across all controls. */
 const CTRL_BTN_STYLE = "background:rgba(255,255,255,0.15);border:1px solid rgba(255,255,255,0.3);color:#fff;padding:8px 16px;border-radius:4px;cursor:pointer;font-size:13px;";
@@ -415,9 +415,9 @@ autoCycleLabel.append(document.createTextNode("every"), autoCycleInput, document
 
 // Resolution selector (Geiss internal render resolution)
 const geissResSelect = makeSelect("geiss-res-select", [
-  { value: "640x480", text: "640×480" },
-  { value: "960x720", text: "960×720" },
-  { value: "1280x960", text: "1280×960" },
+  { value: "640x480", text: "640x480" },
+  { value: "960x720", text: "960x720" },
+  { value: "1280x960", text: "1280x960" },
   { value: "dynamic", text: "Dynamic (viewport)" },
 ]);
 geissResSelect.value = "960x720";
@@ -459,7 +459,7 @@ modeRow.append(
 controls.append(playRow, pipelineRow, presetRow, modeRow);
 document.body.appendChild(controls);
 
-// ─── Web Audio chain ─────────────────────────────────────────────────────────
+// --- Web Audio chain ---------------------------------------------------------
 
 const ctx = new AudioContext();
 const source = ctx.createMediaElementSource(audio);
@@ -469,7 +469,7 @@ analyser.smoothingTimeConstant = 0.8;
 source.connect(analyser);
 analyser.connect(ctx.destination);
 
-// ─── Visualizer state ────────────────────────────────────────────────────────
+// --- Visualizer state --------------------------------------------------------
 
 let viz: BergiumVisualizer;
 let currentPipeline: "milkdrop" | "geiss" = "milkdrop";
@@ -524,7 +524,7 @@ function loadCurrentPreset(): void {
   viz.loadPreset(preset as Parameters<typeof viz.loadPreset>[0], 0.5);
 }
 
-// ─── Event handlers ───────────────────────────────────────────────────────────
+// --- Event handlers -----------------------------------------------------------
 
 playBtn.addEventListener("click", async () => {
   if (audio.paused) {
@@ -631,7 +631,7 @@ gridCb.checkbox.addEventListener("change", () => {
   if (viz instanceof GeissAdapter) viz.setEffect("grid", gridCb.checkbox.checked);
 });
 
-// ─── Render loop ─────────────────────────────────────────────────────────────
+// --- Render loop -------------------------------------------------------------
 
 function loop(): void {
   viz.render();
@@ -653,4 +653,4 @@ window.addEventListener("resize", () => {
   viz.setRendererSize(w, h);
 });
 
-console.log("[Bergium Demo] Initialized — click Play and choose a pipeline/preset.");
+console.log("[Bergium Demo] Initialized - click Play and choose a pipeline/preset.");

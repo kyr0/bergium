@@ -2,7 +2,7 @@ import BlurHorizontal from "./blurHorizontal.js";
 import BlurVertical from "./blurVertical.js";
 
 /**
- * BlurShader — the separable two-pass blur wrapper (horizontal then vertical).
+ * BlurShader - the separable two-pass blur wrapper (horizontal then vertical).
  *
  * Mechanical TypeScript port of vendor/butterchurn/src/rendering/shaders/blur/blur.js
  * (pinned revision fbac6f6). Manages FBOs/textures for each blur level and calls

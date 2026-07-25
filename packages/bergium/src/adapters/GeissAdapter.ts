@@ -1,12 +1,12 @@
 /**
- * GeissAdapter — BergiumVisualizer implementation backed by GeissGpuFrameGraph.
+ * GeissAdapter - BergiumVisualizer implementation backed by GeissGpuFrameGraph.
  *
  * Wraps the GPU-only Geiss pipeline so it conforms to the same visualizer API as
  * Milkdrop. Manages: WebGLGraphicsDevice, GeissGpuFrameGraph, palette/map state,
  * and automatic + manual Geiss mode cycling.
  *
  * The Geiss renderer uses a ping-pong feedback loop with GPU warp and palette
- * presentation. Unlike Milkdrop, Geiss has no preset loading — the equivalent
+ * presentation. Unlike Milkdrop, Geiss has no preset loading - the equivalent
  * concept is "mode switching" which changes the warp map and visual effects.
  */
 
@@ -63,7 +63,7 @@ function seedGradient(W: number, H: number): Uint8Array {
  * faithfully porting vendor/geiss/main.cpp RenderWave() waveform mode 1:
  * a horizontal trace at vertical center, smoothed 0.9/0.1, MAX-blended.
  *
- * The original uses g_fSoundBuffer[] (float, ~±H/4 range); we derive the
+ * The original uses g_fSoundBuffer[] (float, ~+/-H/4 range); we derive the
  * equivalent from AnalyserNode.getByteTimeDomainData() (uint8, 128=silence).
  */
 function audioStep(
@@ -78,14 +78,14 @@ function audioStep(
   const contrib = new Uint8Array(W * H);
   const cx = W / 2, cy = H / 2;
 
-  // Brightness for the waveform trace (vendor uses volume-derived r≈100-200)
+  // Brightness for the waveform trace (vendor uses volume-derived r~=100-200)
   const BRIGHTNESS = 160;
 
-  // Vertical center (vendor: gYC ≈ FXH/2)
+  // Vertical center (vendor: gYC ~= FXH/2)
   const yCenter = H / 2;
 
   // Amplitude scale: map uint8 (128=silence) to pixel offset.
-  // Original g_fSoundBuffer spans roughly ±H*0.15 for normal audio.
+  // Original g_fSoundBuffer spans roughly +/-H*0.15 for normal audio.
   const ampScale = (H * 0.15) / 128;
 
   // FX_YCUT_HIDE from vendor: skip top/bottom border pixels
@@ -118,7 +118,7 @@ function audioStep(
     }
   }
 
-  // Apply enabled effects (vendor/geiss RenderFX — paints into VS1 before warp)
+  // Apply enabled effects (vendor/geiss RenderFX - paints into VS1 before warp)
   if (effects.shadeBobs) shadeBobs(contrib, W, H, freqData, frame, cx, cy);
   if (effects.chasers) twoChasers(contrib, W, H, frame, cx, cy);
   if (effects.grid) gridEffect(contrib, W, H, frame);
@@ -156,12 +156,12 @@ export class GeissAdapter implements BergiumVisualizer {
   private autoCycleSeconds = DEFAULT_AUTO_CYCLE_SECONDS;
   /** Effect enable flags (matching vendor/geiss effect[] array). */
   private effects = { shadeBobs: false, chasers: false, grid: false };
-  /** Latest frequency-bin data for ShadeBobs (0–255 per bin). */
+  /** Latest frequency-bin data for ShadeBobs (0-255 per bin). */
   private freqData: Uint8Array = new Uint8Array(1024);
 
   private audioNode: AudioNode | null = null;
   private analyserNode: AnalyserNode | null = null;
-  /** Latest time-domain waveform data (0–255, 128=silence) for content injection. */
+  /** Latest time-domain waveform data (0-255, 128=silence) for content injection. */
   private waveData: Uint8Array = new Uint8Array(512);
 
   public constructor(
@@ -207,7 +207,7 @@ export class GeissAdapter implements BergiumVisualizer {
     this.modeStartTime = performance.now();
   }
 
-  // ─── BergiumVisualizer contract ───────────────────────────────────────────
+  // --- BergiumVisualizer contract -------------------------------------------
 
   public connectAudio(node: AudioNode): void {
     this.audioNode = node;
@@ -236,7 +236,7 @@ export class GeissAdapter implements BergiumVisualizer {
     // Demo: fixed resolution, no resize handling needed.
   }
 
-  /** Title overlay state — text + animation start time (performance.now ms). */
+  /** Title overlay state - text + animation start time (performance.now ms). */
   private titleText: string | null = null;
   private titleStartTime = 0;
   private static readonly TITLE_DURATION_MS = 3000;
@@ -324,7 +324,7 @@ export class GeissAdapter implements BergiumVisualizer {
     if (this.titleText) {
       const elapsed = performance.now() - this.titleStartTime;
       if (elapsed < GeissAdapter.TITLE_DURATION_MS) {
-        // Fade: 0→1 in first 300ms, hold, 1→0 in last 500ms
+        // Fade: 0=>1 in first 300ms, hold, 1=>0 in last 500ms
         const fadeIn = Math.min(1, elapsed / 300);
         const fadeOut = Math.min(1, (GeissAdapter.TITLE_DURATION_MS - elapsed) / 500);
         const alpha = Math.min(fadeIn, fadeOut);
@@ -348,7 +348,7 @@ export class GeissAdapter implements BergiumVisualizer {
 
   private sampleAudio(): void {
     if (!this.analyserNode) return;
-    // Read time-domain waveform data (0–255, 128 = silence)
+    // Read time-domain waveform data (0-255, 128 = silence)
     const fftSize = this.analyserNode.fftSize;
     if (this.waveData.length !== fftSize) {
       this.waveData = new Uint8Array(fftSize);
@@ -372,7 +372,7 @@ export class GeissAdapter implements BergiumVisualizer {
     return this.effects[name];
   }
 
-  // ─── Mode management (Geiss-specific) ────────────────────────────────────
+  // --- Mode management (Geiss-specific) ------------------------------------
 
   /** Advance to the next Geiss mode. */
   public nextMode(): void {
@@ -380,7 +380,7 @@ export class GeissAdapter implements BergiumVisualizer {
     this.initMode(this.currentMode);
   }
 
-  /** Switch to a specific Geiss mode (1–GEISS_MODE_COUNT). */
+  /** Switch to a specific Geiss mode (1-GEISS_MODE_COUNT). */
   public setMode(mode: number): void {
     if (mode < 1 || mode > GEISS_MODE_COUNT) return;
     this.currentMode = mode;

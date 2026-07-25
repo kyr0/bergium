@@ -41,7 +41,7 @@ const signature = (data: Uint8ClampedArray, gw: number, gh: number): number[] =>
  * (all TypeScript-native modules) renders to canvas via MilkdropPipeline.
  *
  * Uses the blank preset (no external audio dependency) to exercise the full render
- * pipeline: AudioProcessor → Renderer → Warp → Comp → Output → Canvas.
+ * pipeline: AudioProcessor => Renderer => Warp => Comp => Output => Canvas.
  *
  * Renders 30 frames and:
  * (1) asserts non-blank output,
@@ -51,12 +51,12 @@ const signature = (data: Uint8ClampedArray, gw: number, gh: number): number[] =>
  */
 test("In-tree butterchurn port: renders blank preset, non-blank + animating, golden snapshot",
   async () => {
-    // --- Canvas + AudioContext (no audio fed — uses time-based equations only) ---
+    // --- Canvas + AudioContext (no audio fed - uses time-based equations only) ---
     const canvas = document.createElement("canvas");
     canvas.width = W; canvas.height = H;
     const ctx = new AudioContext();
 
-    // --- In-tree butterchurn (direct factory — no pipeline routing needed) ---
+    // --- In-tree butterchurn (direct factory - no pipeline routing needed) ---
     const viz = createButterchurnVisualizer(ctx, canvas, { width: W, height: H });
     const adapter = new MilkdropPipeline(viz);
 

@@ -5,6 +5,7 @@
   "description": "Architecture scaffold for a Butterchurn-compatible multi-pipeline audio-reactive rendering engine",
   "type": "module",
   "sideEffects": false,
+  "license": "MIT",
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",

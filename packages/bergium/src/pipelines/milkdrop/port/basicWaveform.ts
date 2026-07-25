@@ -2,8 +2,8 @@ import ShaderUtils from "./shaderUtils.js";
 import WaveUtils from "./waveUtils.js";
 
 /**
- * BasicWaveform — the built-in (non-custom) waveform renderer covering the 8
- * MilkDrop wave modes (0–7), with per-mode geometry, volume-modulated alpha,
+ * BasicWaveform - the built-in (non-custom) waveform renderer covering the 8
+ * MilkDrop wave modes (0-7), with per-mode geometry, volume-modulated alpha,
  * preset blending and line-thickening via offset re-draws.
  *
  * Mechanical TypeScript port of vendor/butterchurn/src/rendering/waves/basicWaveform.js

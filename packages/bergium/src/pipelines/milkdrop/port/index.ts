@@ -1,5 +1,5 @@
 /**
- * Butterchurn MilkDrop TypeScript port — public entry point.
+ * Butterchurn MilkDrop TypeScript port - public entry point.
  *
  * Exposes the `createButterchurnVisualizer` factory (matching the vendor's
  * `Butterchurn.createVisualizer` API surface) so that existing hosts (Webamp,

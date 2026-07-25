@@ -27,7 +27,7 @@ import type AudioProcessor from "./audioProcessor.js";
 import type { ImageDataEntry } from "./imageTextures.js";
 
 /**
- * Renderer — the top-level MilkDrop frame pipeline: runs per-frame + per-pixel
+ * Renderer - the top-level MilkDrop frame pipeline: runs per-frame + per-pixel
  * equations, the feedback warp pass, blur, motion vectors, custom shapes/waves,
  * the basic waveform, borders, song-title, then the composite + output pass.
  *

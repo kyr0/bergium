@@ -65,7 +65,7 @@ Starting with this spec found here: <http://www.perlmonks.org/bare/?node_id=5848
 > I've taken a look at some EQF files that I made for the purpose. The format is apparently very simple:
 > The file is 299 bytes long.
 >
-> It starts with a text header, which in my case, is 37 bytes long. It is, in double-quotish notation — note the control-Z character:
+> It starts with a text header, which in my case, is 37 bytes long. It is, in double-quotish notation - note the control-Z character:
 >
 > Winamp EQ library file v1.1\cZ!--Entry1
 >

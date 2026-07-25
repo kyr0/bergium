@@ -129,7 +129,7 @@ const config: Config = {
         //   ],
         // },
       ],
-      copyright: `Copyright © ${new Date().getFullYear()} Jordan Eldredge. Built with Docusaurus.`,
+      copyright: `Copyright (C) ${new Date().getFullYear()} Jordan Eldredge. Built with Docusaurus.`,
     },
     prism: {
       theme: prismThemes.github,

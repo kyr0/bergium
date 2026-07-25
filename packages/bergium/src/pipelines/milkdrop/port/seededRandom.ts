@@ -1,5 +1,5 @@
 /**
- * SeededRandom — deterministic xorshift128+ PRNG.
+ * SeededRandom - deterministic xorshift128+ PRNG.
  *
  * Mechanical TypeScript port of vendor/butterchurn/src/utils/seededRandom.js
  * (pinned revision fbac2f6). Behavior is verified against the vendored source in
@@ -39,7 +39,7 @@ export class SeededRandom {
 
   /** Generate next random number in [0, 1). */
   public next(): number {
-    // xorshift128+ algorithm — kept identical to the source (bit ops, Uint32 store).
+    // xorshift128+ algorithm - kept identical to the source (bit ops, Uint32 store).
     let t = this.state[3]!;
     const s = this.state[0]!;
     this.state[3] = this.state[2]!;

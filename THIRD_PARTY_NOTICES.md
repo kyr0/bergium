@@ -7,7 +7,7 @@ copyright notices.
 - **ringbuf.js** - Paul Adenot and contributors (including me, Aron Homberg; complete TypeScript-rewrite in 2025), MPL-2.0. Integration targets my 
   TypeScript port beginning at `d55cb9a` and its reviewed follow-ups.
 
-Pinned revisions are recorded in `./docs/provenance.md`.
+Pinned revisions are recorded in `packages/bergium/docs/provenance.md`.
 
 Closely based on prior art:
 

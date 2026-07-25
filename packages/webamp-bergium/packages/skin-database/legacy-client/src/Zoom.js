@@ -66,7 +66,7 @@ const Zoom = ({ columnCount, windowWidth }) => {
         title={"Zoom Out"}
         disabled={scaleDown * SCREENSHOT_WIDTH <= 100}
       >
-        {"–"}
+        {"-"}
       </Button>
     </div>
   );

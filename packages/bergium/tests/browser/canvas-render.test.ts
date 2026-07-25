@@ -11,7 +11,7 @@ const clampByte = (v: number): number => Math.max(0, Math.min(255, Math.round(v)
  * Why: the CPU oracle must be observable as actual rendered pixels, not just
  * array values. This warps a source intensity frame, colorizes it with the Geiss
  * palette LUT, rasterizes it to a real 2D canvas in headless Chromium and reads
- * the pixels back — proving the presentation path the 8-bit profile relies on.
+ * the pixels back - proving the presentation path the 8-bit profile relies on.
  */
 test("CPU-oracle intensity + palette render to a 2D canvas and read back exactly", () => {
   const W = 32;

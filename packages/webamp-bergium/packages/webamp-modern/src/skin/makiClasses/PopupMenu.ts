@@ -215,7 +215,7 @@ export default class PopupMenu
   //       case "separator":
   //         return "------";
   //       case "item":
-  //         return `(${item.id}) ${item.text}${item.checked ? " ✔" : ""}`;
+  //         return `(${item.id}) ${item.text}${item.checked ? " [OK]" : ""}`;
   //     }
   //   });
   //   message.unshift("Pick the number matching your choice:\n");

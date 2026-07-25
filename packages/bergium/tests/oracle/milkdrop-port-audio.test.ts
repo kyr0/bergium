@@ -30,7 +30,7 @@ test("ported FFT matches vendored equalized spectrum (sine input)", () => {
 });
 
 test("ported AudioProcessor.updateAudio matches vendored freq arrays (the AudioWorklet seam)", () => {
-  const ap = new AudioProcessor(); // no AudioContext — pure path used by ringbuf feed
+  const ap = new AudioProcessor(); // no AudioContext - pure path used by ringbuf feed
   const tb = new Uint8Array(1024), tbL = new Uint8Array(1024), tbR = new Uint8Array(1024);
   for (let i = 0; i < 1024; i++) {
     const v = 128 + sineInput(i);

@@ -5,9 +5,9 @@ import { GeissAdapter } from "../adapters/GeissAdapter.js";
 /**
  * Factory for creating a Bergium visualizer instance.
  *
- * pipeline "milkdrop" → Butterchurn (TypeScript-native butterchurn port)
- * pipeline "geiss"    → GeissAdapter (GPU frame graph with mode cycling)
- * default             → GeissAdapter (geiss)
+ * pipeline "milkdrop" => Butterchurn (TypeScript-native butterchurn port)
+ * pipeline "geiss"    => GeissAdapter (GPU frame graph with mode cycling)
+ * default             => GeissAdapter (geiss)
  */
 export function createVisualizer(
   audioContext: AudioContext,

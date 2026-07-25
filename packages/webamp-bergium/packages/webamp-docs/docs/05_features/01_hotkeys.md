@@ -28,10 +28,10 @@ webamp.renderWhenReady(document.getElementById("winamp-container"));
 | R         | Toggle Repeat           |
 | S         | Toggle Shuffle          |
 | L         | Open File Dialog        |
-| ← (Left)  | Seek Backward (5s)      |
-| → (Right) | Seek Forward (5s)       |
-| ↑ (Up)    | Volume Up               |
-| ↓ (Down)  | Volume Down             |
+| <= (Left)  | Seek Backward (5s)      |
+| => (Right) | Seek Forward (5s)       |
+| ^ (Up)    | Volume Up               |
+| v (Down)  | Volume Down             |
 | Ctrl+D    | Toggle Double Size Mode |
 | Ctrl+R    | Reverse Playlist        |
 | Ctrl+T    | Toggle Time Mode        |

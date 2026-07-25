@@ -1,5 +1,5 @@
 /**
- * ImageTextures — manages preset image samplers (clouds, empty, extras).
+ * ImageTextures - manages preset image samplers (clouds, empty, extras).
  *
  * Mechanical TypeScript port of vendor/butterchurn/src/image/imageTextures.js
  * (pinned revision fbac6f6). The vendored hardcodes base64 image data; per the

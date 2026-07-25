@@ -1,7 +1,7 @@
 import ShaderUtils from "./shaderUtils.js";
 
 /**
- * BlurVertical — the vertical pass of the separable Gaussian blur with edge darkening.
+ * BlurVertical - the vertical pass of the separable Gaussian blur with edge darkening.
  *
  * Mechanical TypeScript port of vendor/butterchurn/src/rendering/shaders/blur/blurVertical.js
  * (pinned revision fbac6f6). Uses 2 weighted taps + b1ed edge-darkening. Frozen GLSL.

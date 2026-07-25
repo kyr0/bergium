@@ -6,7 +6,7 @@ import PresetEquationRunner, {
 import Utils from "./Utils.js";
 
 /**
- * PresetEquationRunnerWASM — Phase-8 SEAM (typed surface only).
+ * PresetEquationRunnerWASM - Phase-8 SEAM (typed surface only).
  *
  * The WASM/EEL evaluator is a frozen `eel-wasm` asset (plan non-goal: do not
  * reimplement). This class provides the typed public surface the Renderer's

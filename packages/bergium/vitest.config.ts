@@ -8,7 +8,7 @@ import { playwright } from "@vitest/browser-playwright";
  * - project "node": deterministic CPU-oracle and contract tests, run in Node
  *   with no DOM or GPU. This is the fast default (`bun run test`).
  * - project "browser": real headless Chromium (Playwright) tests that render to a
- *   canvas and exercise a WebGL2 context — the only environment where pixel and
+ *   canvas and exercise a WebGL2 context - the only environment where pixel and
  *   GPU assertions are trustworthy. Run with `bun run test:browser`.
  *
  * `vendor/` holds pinned reference repositories and is excluded everywhere; it is

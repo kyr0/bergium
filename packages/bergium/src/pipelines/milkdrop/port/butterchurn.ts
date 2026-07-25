@@ -9,7 +9,7 @@ import AudioProcessor_Impl from "./audioProcessor.js";
 import Renderer_Impl from "./renderer.js";
 import { initializeRNG } from "./rngContext.js";
 
-// ─── Internal MilkDrop preset type (used after JSON.parse) ─────────────────────
+// --- Internal MilkDrop preset type (used after JSON.parse) ---------------------
 
 interface MilkdropPresetShape {
   baseVals: Record<string, number>;
@@ -54,7 +54,7 @@ interface MilkdropPreset {
 }
 
 /**
- * Butterchurn — the top-level MilkDrop visualizer orchestrator.
+ * Butterchurn - the top-level MilkDrop visualizer orchestrator.
  *
  * Mechanical TypeScript port of vendor/butterchurn/src/visualizer.js (pinned
  * revision fbac2f6) and vendor/butterchurn/src/index.js (the factory).
@@ -80,7 +80,7 @@ export default class Butterchurn {
   /**
    * @param audioContext  - Web Audio context (must match the context used for the canvas)
    * @param canvas        - Output 2D canvas (the internal WebGL canvas is offscreen/separate)
-   * @param rawOpts      - Optional settings; `width`/`height` default to 1200×900
+   * @param rawOpts      - Optional settings; `width`/`height` default to 1200x900
    */
   public constructor(
     audioContext: AudioContext,
@@ -140,7 +140,7 @@ export default class Butterchurn {
     });
   }
 
-  // ─── ButterchurnVisualizerHandle contract ─────────────────────────────────
+  // --- ButterchurnVisualizerHandle contract ---------------------------------
 
   /** Connect a Web Audio node as the visualiser's audio source. */
   public connectAudio(node: AudioNode): void {
@@ -212,7 +212,7 @@ export default class Butterchurn {
   }
 
   /**
-   * Milkdrop built-in function preamble — injected into every compiled equation
+   * Milkdrop built-in function preamble - injected into every compiled equation
    * so that presets from butterchurn-presets can reference above(), below(), pow(), etc.
    * Note: `if` is a JS reserved keyword, so we define `_if` and rename calls.
    */
@@ -286,7 +286,7 @@ export default class Butterchurn {
    *
    * Phase 2: when `target` is provided, renders to the Compositor's RenderTarget
    * framebuffer instead of the internal canvas. In this path the 2D
-   * `outputGl.drawImage` is skipped — the Compositor is responsible for
+   * `outputGl.drawImage` is skipped - the Compositor is responsible for
    * presenting the target texture.
    */
   public render(target?: RenderTarget | null): void {
@@ -326,7 +326,7 @@ export default class Butterchurn {
     ext?.loseContext();
   }
 
-  // ─── Utility / debugging ───────────────────────────────────────────────────
+  // --- Utility / debugging ---------------------------------------------------
 
   /** Return a data URL of the composite output texture. */
   public toDataURL(): string {
@@ -338,7 +338,7 @@ export default class Butterchurn {
     return this.renderer.warpBufferToDataURL();
   }
 
-  // ─── Private defaults (faithfully mirror vendored source) ─────────────────
+  // --- Private defaults (faithfully mirror vendored source) -----------------
 
   private readonly baseValsDefaults: Record<string, number> = {
     decay: 0.98,
@@ -455,7 +455,7 @@ export default class Butterchurn {
     additive: 0,
   };
 
-  // ─── Static helpers (mirror vendored) ─────────────────────────────────────
+  // --- Static helpers (mirror vendored) -------------------------------------
 
   /**
    * Merge `baseVals` into `baseValsDefaults`, keeping defaults where no override
@@ -475,7 +475,7 @@ export default class Butterchurn {
   }
 }
 
-// ─── Options type ────────────────────────────────────────────────────────────
+// --- Options type ------------------------------------------------------------
 
 interface ButterchurnOpts {
   width?: number;

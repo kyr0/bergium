@@ -1,7 +1,7 @@
 import FFT from "./fft.js";
 
 /**
- * AudioProcessor — captures/converts the Web Audio window into Butterchurn's
+ * AudioProcessor - captures/converts the Web Audio window into Butterchurn's
  * signed-byte + spectrum arrays.
  *
  * Mechanical TypeScript port of vendor/butterchurn/src/audio/audioProcessor.js

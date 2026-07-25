@@ -53,7 +53,7 @@ test("GPU frame-graph ping-pong loop matches the CPU oracle every frame (intensi
   let cpuBack = new Uint8Array(W * H);
 
   for (let f = 0; f < 5; f++) {
-    // CPU step — same normative order as the GPU graph.
+    // CPU step - same normative order as the GPU graph.
     for (let i = 0; i < cpuFront.length; i++) injectAdd(cpuFront, i, preWarp[i]!);
     diminishCenter(cpuFront, diminishOpts);
     warpIntensity8(cpuFront, cpuBack, map, W);

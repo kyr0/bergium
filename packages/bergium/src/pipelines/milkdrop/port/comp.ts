@@ -6,8 +6,8 @@ import type { RNGContext } from "./seededRandom.js";
 import type { WarpQData } from "./warp.js";
 
 /**
- * CompShader — the composite pass: samples the warped frame through the preset's
- * comp shader with a fixed 32×24 hue-shaded vertex grid, echo/gamma/post effects
+ * CompShader - the composite pass: samples the warped frame through the preset's
+ * comp shader with a fixed 32x24 hue-shaded vertex grid, echo/gamma/post effects
  * and preset-image injection.
  *
  * Mechanical TypeScript port of vendor/butterchurn/src/rendering/shaders/comp.js

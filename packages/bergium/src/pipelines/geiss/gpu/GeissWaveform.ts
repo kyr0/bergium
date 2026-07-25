@@ -11,7 +11,7 @@ export interface GpuWaveInput extends WaveformGeometry {
  * GPU rasterization of the six classic waveforms. The trace geometry comes from
  * the shared `waveformCurve` oracle (frame-independent, so it stays on the CPU and
  * avoids any feedback readback); the points are rasterized into a contribution
- * map and max-blended into the intensity target via GeissInject — reproducing
+ * map and max-blended into the intensity target via GeissInject - reproducing
  * renderWave's `plot` (trunc + bounds + injectMax) byte-for-byte. Reusing the
  * verified max-blend primitive keeps this exact rather than depending on GL
  * point-rasterization rules.

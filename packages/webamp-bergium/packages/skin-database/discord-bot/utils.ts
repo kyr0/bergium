@@ -145,7 +145,7 @@ export async function postSkin({
         await msg.channel.send(
           `${canonicalFilename} was approved by ${user.username}`
         );
-        msg.react("✅");
+        msg.react("[OK]");
         break;
       case "😔":
       case "👎":
@@ -180,7 +180,7 @@ export async function postSkin({
 function getPrettyTwitterStatus(status: TweetStatus): string {
   switch (status) {
     case "APPROVED":
-      return "Approved ✅";
+      return "Approved [OK]";
     case "NSFW":
       return "Rejected (NSFW) ❌";
     case "REJECTED":

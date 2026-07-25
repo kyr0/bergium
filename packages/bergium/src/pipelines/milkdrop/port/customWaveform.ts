@@ -8,7 +8,7 @@ import PresetEquationRunner, {
 } from "./presetEquationRunner.js";
 
 /**
- * CustomWaveform — renders a single user-defined (per-frame/per-point equation)
+ * CustomWaveform - renders a single user-defined (per-frame/per-point equation)
  * waveform for one of the 4 MilkDrop custom-wave slots.
  *
  * Mechanical TypeScript port of vendor/butterchurn/src/rendering/waves/customWaveform.js

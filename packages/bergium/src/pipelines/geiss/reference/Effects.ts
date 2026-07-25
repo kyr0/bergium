@@ -1,11 +1,11 @@
 /**
- * Geiss visual effects — faithful ports of vendor/geiss/main.cpp RenderFX().
+ * Geiss visual effects - faithful ports of vendor/geiss/main.cpp RenderFX().
  *
  * Each effect paints additive content into a Uint8Array (W*H bytes, one per texel)
  * that gets max-blended into the feedback buffer as a preWarp contribution.
  *
  * Ported from vendor/geiss/main.cpp:
- *   - ShadeBobs/SPECTRAL (lines 8431–8620): frequency-driven blob nodes
+ *   - ShadeBobs/SPECTRAL (lines 8431-8620): frequency-driven blob nodes
  *   - Two_Chasers (line 5490): two chasing points
  *   - Grid (line 5521): grid pattern
  */
@@ -25,10 +25,10 @@ const SQRT_TAB: Float32Array = (() => {
 const NUM_FREQS = 16;
 
 /**
- * ShadeBobs / SPECTRAL effect — paints NUM_FREQS circular blobs at positions
+ * ShadeBobs / SPECTRAL effect - paints NUM_FREQS circular blobs at positions
  * driven by accumulated phase, with radius ∝ frequency amplitude.
  *
- * Faithful port of vendor/geiss/main.cpp lines 8498–8620.
+ * Faithful port of vendor/geiss/main.cpp lines 8498-8620.
  */
 export function shadeBobs(
   contrib: Uint8Array,
@@ -61,7 +61,7 @@ export function shadeBobs(
     let r = amp * 0.06 - 2;
     r = Math.max(0, Math.min(10, r));
 
-    // Draw 21×21 filled circle (vendor lines 8530–8545)
+    // Draw 21x21 filled circle (vendor lines 8530-8545)
     for (let dy = -10; dy <= 10; dy++) {
       const py = cy + dy;
       if (py < yCutHide || py >= H - yCutHide) continue;
@@ -83,7 +83,7 @@ export function shadeBobs(
 }
 
 /**
- * Two_Chasers effect — two points orbiting around the center,
+ * Two_Chasers effect - two points orbiting around the center,
  * brightness modulated by overall volume.
  */
 export function twoChasers(
@@ -123,7 +123,7 @@ export function twoChasers(
 }
 
 /**
- * Grid effect — paints a grid of dots that pulse with the frame counter.
+ * Grid effect - paints a grid of dots that pulse with the frame counter.
  */
 export function gridEffect(
   contrib: Uint8Array,

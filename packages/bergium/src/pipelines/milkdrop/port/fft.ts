@@ -1,5 +1,5 @@
 /**
- * FFT — radix-2 frequency-domain transform.
+ * FFT - radix-2 frequency-domain transform.
  *
  * Mechanical TypeScript port of vendor/butterchurn/src/audio/fft.js (pinned
  * revision fbac2f6). Pure (no DOM/audio deps); verified against the vendored

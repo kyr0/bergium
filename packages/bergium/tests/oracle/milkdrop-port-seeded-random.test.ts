@@ -5,7 +5,7 @@ import Utils from "../../src/pipelines/milkdrop/port/Utils.js";
 
 // Golden values captured from the vendored pinned source
 // (vendor/butterchurn/src/utils/seededRandom.js). The TS port must reproduce them
-// exactly — this is the "mechanical port" regression guard for Phase 1/8.
+// exactly - this is the "mechanical port" regression guard for Phase 1/8.
 const SEED1_NEXT10 = [
   0.6057086302898824, 0.4083256188314408, 0.25416341074742377, 0.8699094406329095,
   0.22117962269112468, 0.06261173472739756, 0.8399010733701289, 0.605112976860255,

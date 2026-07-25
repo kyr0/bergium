@@ -8,7 +8,6 @@ coverage/
 vendor/
 
 packages/**/*.mp3
-
 .vitest-attachments/
 
 **/.DS_Store

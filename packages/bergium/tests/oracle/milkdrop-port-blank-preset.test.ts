@@ -16,7 +16,7 @@ const opts: RunnerOpts = {
 };
 
 /**
- * Why: the ported blankPreset must match the vendored pinned source — structure
+ * Why: the ported blankPreset must match the vendored pinned source - structure
  * (baseVals, 4 waves, 4 shapes, warp/comp shaders) and equation behavior through
  * the ported PresetEquationRunner. Goldens captured from vendor/butterchurn.
  */

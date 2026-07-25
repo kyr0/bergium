@@ -1,5 +1,5 @@
 /**
- * AudioLevels — Butterchurn's bass/mid/treble level + attack/average state.
+ * AudioLevels - Butterchurn's bass/mid/treble level + attack/average state.
  *
  * Mechanical TypeScript port of vendor/butterchurn/src/audio/audioLevels.js
  * (pinned revision fbac2f6). The only substitution: a local `clamp` instead of the

@@ -26,7 +26,7 @@ const opts: RunnerOpts = {
 
 /**
  * Why: the ported JS equation runner must match the vendored pinned source's
- * behavior — q init/frame eqs, q reset each frame, user-var carryover, globalVars
+ * behavior - q init/frame eqs, q reset each frame, user-var carryover, globalVars
  * propagation, and the runVertEQs flag. Goldens captured from
  * vendor/butterchurn/src/equations/presetEquationRunner.js.
  */

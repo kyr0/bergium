@@ -7,7 +7,7 @@ The demo site in `packages/webamp-demo` imports the library source directly, so 
     cd packages/webamp-demo
     pnpm start
 
-Any edits to library source files in `packages/webamp/js/` are immediately reflected in the browser — no rebuild needed.
+Any edits to library source files in `packages/webamp/js/` are immediately reflected in the browser - no rebuild needed.
 
     # Run tests
     cd packages/webamp

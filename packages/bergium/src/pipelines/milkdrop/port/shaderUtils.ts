@@ -1,5 +1,5 @@
 /**
- * ShaderUtils — shader string parsing and GL capability detection.
+ * ShaderUtils - shader string parsing and GL capability detection.
  *
  * Mechanical TypeScript port of vendor/butterchurn/src/rendering/shaders/shaderUtils.js
  * (pinned revision fbac2f6). Used by all shader modules to split preset shader text

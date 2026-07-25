@@ -156,7 +156,7 @@ function generatePopupItem(menu: IMenuItem | IMenuPopup): HTMLElement {
   //? checkmark
   const checkMark = document.createElement("span");
   checkMark.classList.add("checkmark");
-  checkMark.textContent = menu.checked ? "✓" : " ";
+  checkMark.textContent = menu.checked ? "[OK]" : " ";
   item.appendChild(checkMark);
 
   //? display text
@@ -178,7 +178,7 @@ function generatePopupItem(menu: IMenuItem | IMenuPopup): HTMLElement {
   chevron.classList.add("chevron");
   chevron.textContent = menu.type == "popup" ? "🞂" : " ";
   item.appendChild(chevron);
-  // item.textContent = `${menu.checked? '✓' : ' '} ${menu.caption}`;
+  // item.textContent = `${menu.checked? '[OK]' : ' '} ${menu.caption}`;
 
   return item;
 }

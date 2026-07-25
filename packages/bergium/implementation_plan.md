@@ -10,9 +10,9 @@ drift. New 3D/JSON behavior is an extension and cannot alter classic results.
 
 Read first:
 
-- `docs/provenance.md` — revisions, licensing and honest meaning of “1:1”;
-- `docs/geiss-reference.md` — exact constants, mode table, map formulas and quirks;
-- `docs/butterchurn-drift-guard.md` — Butterchurn audio/render ordering to freeze.
+- `docs/provenance.md` - revisions, licensing and honest meaning of "1:1";
+- `docs/geiss-reference.md` - exact constants, mode table, map formulas and quirks;
+- `docs/butterchurn-drift-guard.md` - Butterchurn audio/render ordering to freeze.
 
 ## Goals
 
@@ -21,7 +21,7 @@ Webamp-integration-compatible, that forks Butterchurn's MilkDrop pipeline and ad
 faithful Geiss rendering pipeline, driven by fast AudioWorklet-based audio analysis
 in TypeScript over the project's ringbuf.js transport. Renderers and presets are
 pluggable and data-driven: each pipeline implements one `RendererPipeline` contract
-and is selected by a versioned, declarative preset — never by executable user source.
+and is selected by a versioned, declarative preset - never by executable user source.
 
 - Preserve Butterchurn's default export and `createVisualizer`, `connectAudio`,
   `loadPreset`, `setRendererSize`, `launchSongTitleAnim`, `render` behavior.
@@ -59,13 +59,13 @@ The pinned sources are checked out under the gitignored `vendor/` directory (see
 `docs/provenance.md`) for reading and behavioral cross-checking only. They are never
 imported by the build, never built, and never executed by the test suite:
 
-- `vendor/geiss` — the authoritative C reference for Geiss constants, mode table,
+- `vendor/geiss` - the authoritative C reference for Geiss constants, mode table,
   map formulas and quirks. Read it to verify the oracle; do not compile or instrument.
-- `vendor/butterchurn` — the fork base for the MilkDrop pipeline and the
+- `vendor/butterchurn` - the fork base for the MilkDrop pipeline and the
   compatibility contract; golden frames are captured from it running in a browser.
-- `vendor/ringbuf.js` — the SPSC ring transport used by the audio capture path.
-- `vendor/webamp` — the host whose `createVisualizer` integration surface we preserve.
-- `vendor/milky.js` — cautionary reference only; not built, not tested.
+- `vendor/ringbuf.js` - the SPSC ring transport used by the audio capture path.
+- `vendor/webamp` - the host whose `createVisualizer` integration surface we preserve.
+- `vendor/milky.js` - cautionary reference only; not built, not tested.
 
 ## Stable boundaries
 
@@ -102,7 +102,7 @@ The main/worker consumer:
 6. runs `GeissAudioAnalyzer` once per simulation frame;
 7. separately derives Butterchurn's original 1024-byte/512-sample FFT arrays.
 
-Do not force both pipelines through one “improved” spectrum. Shared capture is
+Do not force both pipelines through one "improved" spectrum. Shared capture is
 correct; shared analysis would cause drift. SharedArrayBuffer needs cross-origin
 isolation, so retain Worklet/MessagePort and AnalyserNode paths. Compare all
 adapters from the same recorded PCM, not from simultaneous live nodes.
@@ -138,7 +138,7 @@ match those oracles; they are not permission to simplify the rules.
 
 ### Why the Milky.js prototype is similar, not equivalent
 
-Its core insight—recursive feedback plus waveform injection—is right, but its
+Its core insight-recursive feedback plus waveform injection-is right, but its
 dynamics differ: a computed fade buffer is overwritten by the subsequent copy;
 palette-colored RGBA is fed back and the red channel becomes the next index;
 transform sampling is nearest-neighbor and globally parameterized rather than a
@@ -158,9 +158,9 @@ The right path is the reference frame graph, not more post-effects on the protot
   filtering but must use a different profile name.
 - Pre/post injection can use raster geometry, but max/add saturation must match
   CPU oracle. Ordered writes that affect each other require an intermediate pass.
-- Palette is a 256×1 LUT sampled only by presentation in the 8-bit profile.
+- Palette is a 256x1 LUT sampled only by presentation in the 8-bit profile.
 - True-color uses separate BGRA feedback resources and its source-specific color
-  writers/output rules; it is not “8-bit plus a color post-effect.”
+  writers/output rules; it is not "8-bit plus a color post-effect."
 
 ### Map lifetime
 
@@ -168,7 +168,7 @@ Generate a complete pending map from one snapshotted parameter/PRNG state. Moder
 hardware may calculate it immediately, but activation remains source-timed: rush
 or non-beat mode activates immediately; beat mode waits for `bBigBeat` while the
 threshold decreases `.2/modeFrames`. X wraps with `W-1`, flattened Y clamps to
-rows 2…`H-3`, damping uses FPS-at-switch, and source quirks remain fixture-tested.
+rows 2...`H-3`, damping uses FPS-at-switch, and source quirks remain fixture-tested.
 
 ## Butterchurn pipeline
 
@@ -193,7 +193,7 @@ Text has two explicit destinations: `feedback` is rasterized into a selected
 pipeline layer and therefore trails/warps; `overlay` is composed after pipelines
 and stays crisp. Begin with DPR-aware Canvas2D shaping cached into textures;
 introduce MSDF only for persistent/3D text. Never scrape renderer internals for
-Webamp title support—keep the public title method and temporary shim.
+Webamp title support-keep the public title method and temporary shim.
 
 ## Implementation phases and gates
 
@@ -204,8 +204,8 @@ Webamp title support—keep the public title method and temporary shim.
 3. **Capture once, analyze twice:** ringbuf fast path plus fallbacks. Gate: PCM
    record/replay parity; Butterchurn arrays exact; Geiss state exact.
 4. **Classic CPU oracle:** deterministic mode/map/effect/audio/wave/palette state.
-   Gate: the seeded CPU oracle reproduces state at 320×240 and 640×480 under a
-   declared profile; the pinned Geiss C source is read to confirm behavior — never
+   Gate: the seeded CPU oracle reproduces state at 320x240 and 640x480 under a
+   declared profile; the pinned Geiss C source is read to confirm behavior - never
    built or instrumented.
 5. **Classic GPU:** integer feedback/map/injection passes. Gate: per-pass texture
    comparisons against the CPU oracle, then in-browser (headless Chromium) visual

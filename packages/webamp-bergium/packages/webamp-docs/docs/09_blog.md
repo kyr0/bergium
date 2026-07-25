@@ -3,8 +3,8 @@
 Over the years that I've been working on Webamp, I've written a number of blog posts on topics related to it.
 
 - [Preserving Winamp skins for posterity at the Internet Archive](https://jordaneldredge.com/notes/ia-skins/)
-- [Rendering “modern” Winamp skins in the browser](https://jordaneldredge.com/notes/webamp-modern/)
-- [100k skins: Reflections on the Winamp Skin Museum’s upload flow](https://jordaneldredge.com/notes/skin-upload/)
+- [Rendering "modern" Winamp skins in the browser](https://jordaneldredge.com/notes/webamp-modern/)
+- [100k skins: Reflections on the Winamp Skin Museum's upload flow](https://jordaneldredge.com/notes/skin-upload/)
 - [The Winamp Skin Museum has a secret debug mode](https://jordaneldredge.com/notes/skin-debug/)
 - [The Winamp Skin Museum is powered by an sqlite3 database](https://jordaneldredge.com/notes/winamp-sqlite/)
 - [Winamp Skin Mosaics](https://jordaneldredge.com/notes/winamp-mosaics/)

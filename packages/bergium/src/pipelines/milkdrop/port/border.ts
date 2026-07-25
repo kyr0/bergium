@@ -1,7 +1,7 @@
 import ShaderUtils from "./shaderUtils.js";
 
 /**
- * Border — the inner/outer border sprite (4-sided frame via 8 triangles).
+ * Border - the inner/outer border sprite (4-sided frame via 8 triangles).
  *
  * Mechanical TypeScript port of vendor/butterchurn/src/rendering/sprites/border.js
  * (pinned revision fbac2f6). Shader strings are frozen assets.

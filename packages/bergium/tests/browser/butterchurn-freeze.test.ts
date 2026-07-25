@@ -44,7 +44,7 @@ const signature = (data: Uint8ClampedArray, gw: number, gh: number): number[] =>
  * prebuilt of the same version as the vendored revision) through the
  * MilkdropPipeline adapter, rendering its built-in default preset, and freezes:
  * (1) the exact Webamp API surface, (2) that it renders a non-blank, animating
- * image, and (3) a coarse golden snapshot (tolerant image metric per the plan —
+ * image, and (3) a coarse golden snapshot (tolerant image metric per the plan -
  * MilkDrop is not byte-deterministic). Deterministic timing (mocked
  * performance.now) keeps the golden stable run-to-run. Live audio is Phase 3; the
  * preset animates on its own here, so no AudioContext resume is needed (which

@@ -7,7 +7,7 @@ import PresetEquationRunner, {
 } from "./presetEquationRunner.js";
 
 /**
- * CustomShape — renders a single user-defined (per-frame equation) polygon shape
+ * CustomShape - renders a single user-defined (per-frame equation) polygon shape
  * for one of the 4 MilkDrop custom-shape slots, with optional texture, outline
  * border and additive blending.
  *

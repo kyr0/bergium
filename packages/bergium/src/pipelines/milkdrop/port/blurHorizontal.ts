@@ -1,7 +1,7 @@
 import ShaderUtils from "./shaderUtils.js";
 
 /**
- * BlurHorizontal — the horizontal pass of the separable Gaussian blur.
+ * BlurHorizontal - the horizontal pass of the separable Gaussian blur.
  *
  * Mechanical TypeScript port of vendor/butterchurn/src/rendering/shaders/blur/blurHorizontal.js
  * (pinned revision fbac6f6). Uses 4 weighted taps with per-level scale/bias.

@@ -10,7 +10,7 @@ Each TypeScript-enabled package in the monorepo now has a consistent `type-check
 
 ### Package Status
 
-#### ✅ Passing Packages
+#### [OK] Passing Packages
 
 - **webamp**: Clean TypeScript compilation
 - **ani-cursor**: Clean TypeScript compilation

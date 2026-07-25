@@ -1,7 +1,7 @@
 import ShaderUtils from "./shaderUtils.js";
 
 /**
- * MotionVectors — the MilkDrop motion-vector grid overlay.
+ * MotionVectors - the MilkDrop motion-vector grid overlay.
  *
  * Mechanical TypeScript port of vendor/butterchurn/src/rendering/motionVectors/motionVectors.js
  * (pinned revision fbac2f6). Computes per-cell motion direction by bilinearly

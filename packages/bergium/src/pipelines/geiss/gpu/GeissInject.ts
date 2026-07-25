@@ -8,8 +8,8 @@ export type InjectMode = "max" | "add";
 
 /**
  * Pre/post-warp integer injection. The classic effects and waveform write into the
- * feedback buffer with two rules — max-blend (waveform/dots) and saturating add
- * (nuclide/solar) — which map directly to GL `MAX` and additive blending into the
+ * feedback buffer with two rules - max-blend (waveform/dots) and saturating add
+ * (nuclide/solar) - which map directly to GL `MAX` and additive blending into the
  * intensity target. The contribution is supplied as a red-byte texture (effects
  * rasterize into it; this pass performs the blended write). For ordered writes that
  * depend on each other, call this once per order (plan: "require an intermediate

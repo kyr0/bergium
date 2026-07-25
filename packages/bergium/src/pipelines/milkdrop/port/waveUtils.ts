@@ -1,5 +1,5 @@
 /**
- * WaveUtils — waveform vertex smoothing (Catmull-Rom-like interpolation).
+ * WaveUtils - waveform vertex smoothing (Catmull-Rom-like interpolation).
  *
  * Mechanical TypeScript port of vendor/butterchurn/src/rendering/waves/waveUtils.js
  * (pinned revision fbac2f6). Pure math (no GL/DOM); used by BasicWaveform to
@@ -7,7 +7,7 @@
  */
 
 export default class WaveUtils {
-  /** Smooth a waveform's positions, inserting midpoint vertices (2× output). */
+  /** Smooth a waveform's positions, inserting midpoint vertices (2x output). */
   public static smoothWave(
     positions: Float32Array,
     positionsSmoothed: Float32Array,
