@@ -4,11 +4,6 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
-patchedDependencies:
-  butterchurn@3.0.0-beta.5:
-    hash: dn4lya4siqyl4wmtq4serjeoma
-    path: patches/butterchurn@3.0.0-beta.5.patch
-
 importers:
 
   .:
@@ -78,7 +73,7 @@ importers:
     dependencies:
       butterchurn:
         specifier: 3.0.0-beta.5
-        version: 3.0.0-beta.5(patch_hash=dn4lya4siqyl4wmtq4serjeoma)
+        version: 3.0.0-beta.5
       butterchurn-presets:
         specifier: 3.0.0-beta.4
         version: 3.0.0-beta.4
@@ -374,9 +369,12 @@ importers:
       ani-cursor:
         specifier: workspace:*
         version: link:../ani-cursor
+      bergium-core:
+        specifier: link:../../../bergium
+        version: link:../../../bergium
       butterchurn:
         specifier: 3.0.0-beta.5
-        version: 3.0.0-beta.5(patch_hash=dn4lya4siqyl4wmtq4serjeoma)
+        version: 3.0.0-beta.5
       butterchurn-presets:
         specifier: 3.0.0-beta.4
         version: 3.0.0-beta.4
@@ -478,7 +476,7 @@ importers:
         version: link:../ani-cursor
       butterchurn:
         specifier: 3.0.0-beta.5
-        version: 3.0.0-beta.5(patch_hash=dn4lya4siqyl4wmtq4serjeoma)
+        version: 3.0.0-beta.5
       butterchurn-presets:
         specifier: 3.0.0-beta.4
         version: 3.0.0-beta.4
@@ -19231,7 +19229,7 @@ snapshots:
       '@babel/runtime': 7.27.6
       ecma-proposal-math-extensions: 0.0.2
 
-  butterchurn@3.0.0-beta.5(patch_hash=dn4lya4siqyl4wmtq4serjeoma):
+  butterchurn@3.0.0-beta.5:
     dependencies:
       '@assemblyscript/loader': 0.17.14
       ecma-proposal-math-extensions: 0.0.2

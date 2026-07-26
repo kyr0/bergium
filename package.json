@@ -7,11 +7,17 @@
   "packageManager": "bun@1.2.0",
   "workspaces": [
     "apps/demo",
+    "apps/webamp-demo",
     "packages/bergium"
   ],
   "scripts": {
     "build:bergium": "bun run --filter bergium-core build",
     "dev:demo": "bun run --filter bergium-demo dev",
-    "build:demo": "bun run --filter bergium-demo build"
+    "build:demo": "bun run --filter bergium-demo build",
+    "dev:webamp-demo": "bun run --filter bergium-webamp-demo dev",
+    "build:webamp-demo": "bun run --filter bergium-webamp-demo build",
+    "test:webamp-demo": "bun run --filter bergium-webamp-demo test",
+    "build:webamp-bergium": "bun run build:bergium && cd packages/webamp-bergium && bun install && cd packages/ani-cursor && bun run build && cd ../winamp-eqf && bun run build && cd ../webamp && bun run build",
+    "build:all": "bun run build:webamp-bergium && bun run build:demo && bun run build:webamp-demo"
   }
 }

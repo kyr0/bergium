@@ -25,14 +25,18 @@ _Actually, this is a demo project to show the power of Agent Harness-deriven Age
 
 ## Features
 
-- **1000+ Milkdrop presets** - Loads all presets from `butterchurn-presets` with known-broken presets filtered out
+- **High-level [`BergiumPlayer`](packages/bergium/src/api/BergiumPlayer.ts) API** - One canvas, dual pipeline, click-to-toggle, 30s mode/preset cycling, song-title overlays, and a built-in preset registry — all internal, so demos stay tiny
+- **Webamp integration** - Drop-in bergium visualizer for Webamp via `webamp/butterchurn` (see [`apps/webamp-demo`](apps/webamp-demo/README.md))
+- **1000+ Milkdrop presets** - [`getBuiltinPresets()`](packages/bergium/src/presets/builtin/index.ts) merges bergium-authored presets with the `butterchurn-presets` library, filtering known-broken ones
 - **9 Geiss modes** - Auto-cycling with configurable interval (default 30s), or manual selection
 - **Geiss Audio effects** - ShadeBobs, Chasers, and Grid effects with per-effect toggles
 - **Configurable resolution** - Fixed (640x480 / 960x720 / 1280x960), Dynamic (viewport), or Retina (xDPR)
 - **Song title overlay** - Pipeline-agnostic `launchSongTitleAnim()` with fade in/out
-- **Pipeline switching** - Switch live between Milkdrop and Geiss at runtime
+- **Pipeline switching** - Switch live between Milkdrop and Geiss at runtime (canvas click or API)
 
 ## Quick Start
+
+### Standalone demo (`apps/demo`)
 
 ```bash
 # Install dependencies
@@ -45,41 +49,75 @@ bun run build:bergium
 bun run dev:demo
 ```
 
-Then open `http://localhost:5173`, click **Play**, and choose a pipeline/preset.
+Then open `http://localhost:5173`, click **Play**, and use the toggle/preset
+controls (or click the canvas) to switch Geiss/Milkdrop.
+
+### Webamp demo (`apps/webamp-demo`)
+
+Plays the Archive.org **Trancemaster** playlist in Webamp, with bergium as the
+visualizer (click the visualizer window to toggle Geiss/Milkdrop). Requires
+building the webamp fork bundles once — see
+[`apps/webamp-demo/README.md`](apps/webamp-demo/README.md):
+
+```bash
+bun run build:webamp-bergium   # bergium-core + the webamp fork bundles
+bun run dev:webamp-demo        # http://localhost:5174
+```
+
+(Or build everything — bergium, the fork, and both demos — with `bun run build:all`.)
 
 ## API
+
+### High-level: [`BergiumPlayer`](packages/bergium/src/api/BergiumPlayer.ts) (recommended)
+
+Owns both pipelines on one canvas, click-to-toggle, 30s mode/preset cycling,
+song-title overlays, and the built-in preset registry — so demos/integrations
+stay tiny.
+
+```typescript
+import { createBergiumPlayer } from "bergium-core";
+
+const player = createBergiumPlayer(audioContext, canvas, {
+  initialPipeline: "milkdrop", // or "geiss"
+  geiss: { effects: { chasers: true }, cycleSeconds: 30 },
+  milkdrop: { cycleSeconds: 30 },
+});
+
+player.connectAudio(analyserNode);
+// autoRender defaults to true (own RAF loop). Click the canvas to toggle pipelines.
+player.launchSongTitleAnim("Artist - Track");
+```
+
+`BergiumPlayer` implements the small butterchurn-compatible surface Webamp drives
+(`connectAudio` / `loadPreset` / `setRendererSize` / `launchSongTitleAnim` /
+`render`), so Webamp's `webamp/butterchurn` entry injects it directly — see
+[`apps/webamp-demo`](apps/webamp-demo/README.md).
+
+### Low-level: [`createVisualizer`](packages/bergium/src/api/createVisualizer.ts)
+
+For full control (manual preset/mode/effect wiring), use the factory directly:
 
 ```typescript
 import { createVisualizer, GeissAdapter } from "bergium-core";
 
 const viz = createVisualizer(audioContext, canvas, {
-  pipeline: "milkdrop",  // or "geiss"
+  pipeline: "milkdrop", // or "geiss"
   width: 1280,
   height: 720,
 });
 
 viz.connectAudio(analyserNode);
+viz.loadPreset(presetObject, 0.5); // Milkdrop
 
-// Milkdrop: load a preset
-viz.loadPreset(presetObject, 0.5);
-
-// Geiss: switch modes
 if (viz instanceof GeissAdapter) {
-  viz.setMode(3);
+  viz.setMode(3);                 // Geiss
   viz.setAutoMode(true);
   viz.setAutoCycleSeconds(30);
   viz.setEffect("shadeBobs", true);
 }
 
-// Show song title (pipeline-agnostic)
 viz.launchSongTitleAnim("Artist - Track");
-
-// Render loop
-function renderFrame() {
-  viz.render();
-  requestAnimationFrame(renderFrame); // recursion, max FPS
-}
-renderFrame();
+viz.render();
 ```
 
 ## Acknowledgement: Jordan Berg

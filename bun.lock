@@ -10,17 +10,29 @@
       "version": "0.0.0",
       "dependencies": {
         "bergium-core": "workspace:*",
-        "butterchurn-presets": "^2.4.7",
       },
       "devDependencies": {
         "typescript": "^7.0.2",
         "vite": "^8.1.5",
       },
     },
+    "apps/webamp-demo": {
+      "name": "bergium-webamp-demo",
+      "version": "0.0.0",
+      "dependencies": {
+        "bergium-core": "workspace:*",
+      },
+      "devDependencies": {
+        "typescript": "^7.0.2",
+        "vite": "^8.1.5",
+        "vitest": "^4.1.10",
+      },
+    },
     "packages/bergium": {
       "name": "bergium-core",
       "version": "0.0.0",
       "dependencies": {
+        "butterchurn-presets": "^2.4.7",
         "ringbuf.js": "^0.4.0",
       },
       "devDependencies": {
@@ -264,6 +276,8 @@
     "bergium-core": ["bergium-core@workspace:packages/bergium"],
 
     "bergium-demo": ["bergium-demo@workspace:apps/demo"],
+
+    "bergium-webamp-demo": ["bergium-webamp-demo@workspace:apps/webamp-demo"],
 
     "butterchurn": ["butterchurn@3.0.0-beta.5", "", { "dependencies": { "@assemblyscript/loader": "^0.17.11", "ecma-proposal-math-extensions": "0.0.2", "eel-wasm": "^0.0.16" } }, "sha512-BStK4OAbBb9Pvt8PuQlS4WVmYBwU1KuDMRHF1V89QjoIFauAqq7tpV4EpYXj7K563r5daLrMX+2y5DBhZZ9Xig=="],
 

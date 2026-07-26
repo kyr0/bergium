@@ -122,7 +122,8 @@ export function getBuiltinPresets(): Promise<{ name: string; preset: unknown }[]
 
 ## Prerequisite
 1. `bun run build:bergium` (Phase 0 changes).
-2. `cd packages/webamp-bergium && pnpm install && pnpm --filter webamp build` (Phase 2).
+2. `bun run build:webamp-bergium` — `bun install` in the fork + `bun run build` for
+   ani-cursor/winamp-eqf/webamp (Phase 2). No pnpm: the fork is consumed with bun.
 3. `bun run dev:webamp-demo` (Vite alias resolves the rebuilt bundle + bun-workspace bergium-core).
 
 ## Risks / notes

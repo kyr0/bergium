@@ -6,6 +6,8 @@
   "type": "module",
   "sideEffects": false,
   "license": "MIT",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
@@ -24,6 +26,7 @@
     "test:all": "vitest run"
   },
   "dependencies": {
+    "butterchurn-presets": "^2.4.7",
     "ringbuf.js": "^0.4.0"
   },
   "devDependencies": {

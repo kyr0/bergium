@@ -129,7 +129,12 @@ async function build() {
       },
       // Optimize external dependencies handling
       external: (id) => {
-        // Don't externalize these - we want them bundled for browser compatibility
+        // bergium-core ships GLSL `?raw` assets this rollup has no loader for, so
+        // keep it external and let the host app (Vite/bundler) resolve it.
+        if (id === "bergium-core" || id.startsWith("bergium-core/")) {
+          return true;
+        }
+        // Everything else is inlined for browser compatibility.
         return false;
       },
       onwarn: (warning, warn) => {

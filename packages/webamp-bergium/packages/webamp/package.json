@@ -61,6 +61,7 @@
   },
   "homepage": "https://github.com/captbaritone/webamp/",
   "devDependencies": {
+    "bergium-core": "file:../../../bergium",
     "ani-cursor": "workspace:*",
     "butterchurn": "3.0.0-beta.5",
     "butterchurn-presets": "3.0.0-beta.4",
