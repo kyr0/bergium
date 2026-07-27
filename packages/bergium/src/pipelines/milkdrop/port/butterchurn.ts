@@ -8,6 +8,7 @@ import type { RendererPreset } from "./renderer.js";
 import AudioProcessor_Impl from "./audioProcessor.js";
 import Renderer_Impl from "./renderer.js";
 import { initializeRNG } from "./rngContext.js";
+import { compileEquation } from "./equationCompiler.js";
 
 // --- Internal MilkDrop preset type (used after JSON.parse) ---------------------
 
@@ -211,25 +212,12 @@ export default class Butterchurn {
     }
   }
 
-  /**
-   * Milkdrop built-in function preamble - injected into every compiled equation
-   * so that presets from butterchurn-presets can reference above(), below(), pow(), etc.
-   * Note: `if` is a JS reserved keyword, so we define `_if` and rename calls.
-   */
-  private static readonly EQ_PREAMBLE = `const sin=Math.sin,cos=Math.cos,tan=Math.tan,asin=Math.asin,acos=Math.acos,atan=Math.atan,atan2=Math.atan2,sinh=Math.sinh,cosh=Math.cosh,tanh=Math.tanh,sqrt=Math.sqrt,pow=Math.pow,exp=Math.exp,log=Math.log,log10=Math.log10,abs=Math.abs,ceil=Math.ceil,floor=Math.floor,round=Math.round,min=Math.min,max=Math.max,sqr=(x)=>x*x,frac=(x)=>x-Math.floor(x),clamp=(x,lo,hi)=>Math.min(hi,Math.max(lo,x)),above=(a,b)=>a>b?1:0,below=(a,b)=>a<b?1:0,equal=(a,b)=>a===b?1:0,_if=(c,a,b)=>c?a:b,sign=(x)=>x>0?1:x<0?-1:0,sigmoid=(x)=>1/(1+Math.exp(-x)),int=(x)=>Math.trunc(x),rand=(m)=>Math.floor(Math.random()*m),randint=(m)=>Math.floor(Math.random()*m),mod=(a,b)=>a%b,div=(a,b)=>Math.trunc(a/b),bor=(a,b)=>a|b,band=(a,b)=>a&b,bnot=(a)=>~a,bshift=(a,b)=>a<<b,gettime=()=>performance.now()*0.001;`;
-
-  /** Replace milkdrop `if(` calls with `_if(` since `if` is a JS reserved keyword. */
-  private static sanitizeEqs(eqs: string | undefined): string {
-    return (eqs ?? "").replace(/\bif\b/g, "_if");
-  }
-
-  /** Compile string equations to functions and forward to the renderer. */
+  /** Compile string equations to functions and forward to the renderer.
+   * The built-in preamble + `if` sanitizer live in `./equationCompiler.js`. */
   private loadJSPreset(preset: MilkdropPreset, blendTime: number): void {
     // If init_eqs is already a function, the preset has been prepared already.
     if (typeof preset.init_eqs !== "function") {
-      const P = Butterchurn.EQ_PREAMBLE;
-      const compile = (eqs: string | undefined): ((m: unknown) => unknown) =>
-        new Function("a", `${P} ${Butterchurn.sanitizeEqs(eqs)} return a;`) as (m: unknown) => unknown;
+      const compile = compileEquation;
 
       preset.init_eqs = compile(preset.init_eqs_str);
       preset.frame_eqs = compile(preset.frame_eqs_str);
