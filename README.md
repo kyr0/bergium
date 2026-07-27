@@ -1,5 +1,6 @@
 <p align="center">
   <img src="artwork/bergium-0.0.0.jpeg" alt="Bergium" width="600" />
+  <img src="artwork/webamp-bergium-0.0.0.png" alt="Bergium Webamp" width="600" />
 </p>
 
 <h1 align="center">Bergium</h1>
