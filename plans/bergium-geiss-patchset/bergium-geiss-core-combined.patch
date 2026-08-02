@@ -1,0 +1,1673 @@
+diff --git a/packages/bergium/src/pipelines/geiss/gpu/GeissScalarPresenter.ts b/packages/bergium/src/pipelines/geiss/gpu/GeissScalarPresenter.ts
+new file mode 100644
+index 0000000..9b6b871
+--- /dev/null
++++ b/packages/bergium/src/pipelines/geiss/gpu/GeissScalarPresenter.ts
+@@ -0,0 +1,158 @@
++/**
++ * Zero-readback WebGL2 presenter for a CPU-simulated scalar Geiss frame.
++ *
++ * The exact/portable classic backend uploads one W*H byte plane. Palette lookup,
++ * Y orientation, scaling and final presentation remain on the GPU. No ImageData,
++ * temporary canvas or `readPixels()` is involved.
++ */
++
++import type { RGB } from "../reference/Palette.js";
++import { u8 } from "../reference/GeissNumeric.js";
++
++const VERTEX = `#version 300 es
++precision highp float;
++out vec2 vUv;
++void main() {
++  vec2 p = vec2((gl_VertexID << 1) & 2, gl_VertexID & 2);
++  vUv = p;
++  gl_Position = vec4(p * 2.0 - 1.0, 0.0, 1.0);
++}`;
++
++const FRAGMENT = `#version 300 es
++precision highp float;
++in vec2 vUv;
++uniform sampler2D uIntensity;
++uniform sampler2D uPalette;
++out vec4 outColor;
++void main() {
++  // CPU raster order is top-to-bottom; WebGL texture row zero is bottom.
++  float intensity = texelFetch(uIntensity, ivec2(
++    int(clamp(vUv.x, 0.0, 0.999999) * float(textureSize(uIntensity, 0).x)),
++    int(clamp(1.0 - vUv.y, 0.0, 0.999999) * float(textureSize(uIntensity, 0).y))
++  ), 0).r;
++  int index = int(intensity * 255.0 + 0.5);
++  outColor = texelFetch(uPalette, ivec2(index, 0), 0);
++}`;
++
++function compile(gl: WebGL2RenderingContext, type: number, source: string): WebGLShader {
++  const shader = gl.createShader(type);
++  if (!shader) throw new Error("Failed to allocate WebGL shader");
++  gl.shaderSource(shader, source);
++  gl.compileShader(shader);
++  if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
++    const log = gl.getShaderInfoLog(shader) ?? "unknown shader error";
++    gl.deleteShader(shader);
++    throw new Error(log);
++  }
++  return shader;
++}
++
++function link(gl: WebGL2RenderingContext): WebGLProgram {
++  const vertex = compile(gl, gl.VERTEX_SHADER, VERTEX);
++  const fragment = compile(gl, gl.FRAGMENT_SHADER, FRAGMENT);
++  const program = gl.createProgram();
++  if (!program) throw new Error("Failed to allocate WebGL program");
++  gl.attachShader(program, vertex);
++  gl.attachShader(program, fragment);
++  gl.linkProgram(program);
++  gl.deleteShader(vertex);
++  gl.deleteShader(fragment);
++  if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
++    const log = gl.getProgramInfoLog(program) ?? "unknown link error";
++    gl.deleteProgram(program);
++    throw new Error(log);
++  }
++  return program;
++}
++
++export class GeissScalarPresenter {
++  private readonly program: WebGLProgram;
++  private readonly vao: WebGLVertexArrayObject;
++  private readonly intensity: WebGLTexture;
++  private readonly palette: WebGLTexture;
++  private readonly paletteBytes = new Uint8Array(256 * 4);
++  private readonly intensityLocation: WebGLUniformLocation | null;
++  private readonly paletteLocation: WebGLUniformLocation | null;
++
++  public constructor(
++    private readonly gl: WebGL2RenderingContext,
++    private readonly width: number,
++    private readonly height: number,
++  ) {
++    this.program = link(gl);
++    const vao = gl.createVertexArray();
++    const intensity = gl.createTexture();
++    const palette = gl.createTexture();
++    if (!vao || !intensity || !palette) throw new Error("Failed to allocate Geiss presenter resources");
++    this.vao = vao;
++    this.intensity = intensity;
++    this.palette = palette;
++    this.intensityLocation = gl.getUniformLocation(this.program, "uIntensity");
++    this.paletteLocation = gl.getUniformLocation(this.program, "uPalette");
++
++    gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
++    gl.bindTexture(gl.TEXTURE_2D, intensity);
++    gl.texStorage2D(gl.TEXTURE_2D, 1, gl.R8, width, height);
++    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
++    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
++    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
++    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
++
++    gl.bindTexture(gl.TEXTURE_2D, palette);
++    gl.texStorage2D(gl.TEXTURE_2D, 1, gl.RGBA8, 256, 1);
++    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
++    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
++    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
++    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
++  }
++
++  public setPalette(colors: readonly RGB[]): void {
++    if (colors.length !== 256) throw new RangeError(`Palette has ${colors.length} entries, expected 256`);
++    for (let i = 0; i < 256; i++) {
++      const color = colors[i]!;
++      const o = i * 4;
++      this.paletteBytes[o] = u8(Math.max(0, Math.min(255, Math.round(color.r))));
++      this.paletteBytes[o + 1] = u8(Math.max(0, Math.min(255, Math.round(color.g))));
++      this.paletteBytes[o + 2] = u8(Math.max(0, Math.min(255, Math.round(color.b))));
++      this.paletteBytes[o + 3] = 255;
++    }
++    const gl = this.gl;
++    gl.bindTexture(gl.TEXTURE_2D, this.palette);
++    gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, 256, 1, gl.RGBA, gl.UNSIGNED_BYTE, this.paletteBytes);
++  }
++
++  public upload(frame: Uint8Array): void {
++    if (frame.length !== this.width * this.height) {
++      throw new RangeError(`Scalar frame has ${frame.length} bytes, expected ${this.width * this.height}`);
++    }
++    const gl = this.gl;
++    gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
++    gl.bindTexture(gl.TEXTURE_2D, this.intensity);
++    gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, this.width, this.height, gl.RED, gl.UNSIGNED_BYTE, frame);
++  }
++
++  public present(viewportWidth: number, viewportHeight: number): void {
++    const gl = this.gl;
++    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
++    gl.viewport(0, 0, viewportWidth, viewportHeight);
++    gl.disable(gl.BLEND);
++    gl.useProgram(this.program);
++    gl.activeTexture(gl.TEXTURE0);
++    gl.bindTexture(gl.TEXTURE_2D, this.intensity);
++    gl.uniform1i(this.intensityLocation, 0);
++    gl.activeTexture(gl.TEXTURE1);
++    gl.bindTexture(gl.TEXTURE_2D, this.palette);
++    gl.uniform1i(this.paletteLocation, 1);
++    gl.bindVertexArray(this.vao);
++    gl.drawArrays(gl.TRIANGLES, 0, 3);
++    gl.bindVertexArray(null);
++  }
++
++  public destroy(): void {
++    const gl = this.gl;
++    gl.deleteTexture(this.intensity);
++    gl.deleteTexture(this.palette);
++    gl.deleteVertexArray(this.vao);
++    gl.deleteProgram(this.program);
++  }
++}
+diff --git a/packages/bergium/src/pipelines/geiss/reference/Effects.ts b/packages/bergium/src/pipelines/geiss/reference/Effects.ts
+index b81a8e9..1d171e7 100644
+--- a/packages/bergium/src/pipelines/geiss/reference/Effects.ts
++++ b/packages/bergium/src/pipelines/geiss/reference/Effects.ts
+@@ -1,15 +1,34 @@
+ /**
+- * Geiss visual effects - faithful ports of vendor/geiss/main.cpp RenderFX().
++ * Legacy prototype effect shims.
+  *
+- * Each effect paints additive content into a Uint8Array (W*H bytes, one per texel)
+- * that gets max-blended into the feedback buffer as a preWarp contribution.
+- *
+- * Ported from vendor/geiss/main.cpp:
+- *   - ShadeBobs/SPECTRAL (lines 8431-8620): frequency-driven blob nodes
+- *   - Two_Chasers (line 5490): two chasing points
+- *   - Grid (line 5521): grid pattern
++ * These functions are retained only so the current GPU demo keeps compiling
++ * during migration. They are visual approximations and MUST NOT be used by a
++ * `geiss-4.30-*exact` profile. The source-shaped ordered 8-bit implementation is
++ * exported from `ExactEffects8.ts` below.
+  */
+ 
++export {
++  createDotChaserState8,
++  createShadeBobParameters,
++  diminishCenter8,
++  dotChaser8,
++  grid8,
++  nuclidePreWarp8,
++  renderExactEffects8,
++  selectedSolarParticles8,
++  shadeBobs8,
++  solarParticles320_8,
++  solarParticles8,
++  solidLine8,
++  twoChasers8,
++} from "./ExactEffects8.js";
++export type {
++  DotChaserState8,
++  ExactEffectSelection8,
++  ExactEffects8State,
++  ShadeBobParameters,
++} from "./ExactEffects8.js";
++
+ /** Pre-computed sqrt lookup table for circular falloff (vendor: sqrt_tab[21][21]). */
+ const SQRT_TAB: Float32Array = (() => {
+   const tab = new Float32Array(21 * 21);
+diff --git a/packages/bergium/src/pipelines/geiss/reference/ExactEffects8.ts b/packages/bergium/src/pipelines/geiss/reference/ExactEffects8.ts
+new file mode 100644
+index 0000000..10053d4
+--- /dev/null
++++ b/packages/bergium/src/pipelines/geiss/reference/ExactEffects8.ts
+@@ -0,0 +1,579 @@
++/**
++ * Source-shaped 8-bit Geiss effects.
++ *
++ * Derived from Geiss 4.30 `Effects.h` (BSD-3-Clause, Ryan M. Geiss). These
++ * functions mutate the scalar feedback buffer directly and in source order.
++ * They intentionally do not use a generic contribution/max-blend abstraction:
++ * the original effects mix conditional increments, wrapping byte writes,
++ * saturating additions, direct assignments and nonlinear brightening.
++ */
++
++import type { RandomSource } from "./MapField.js";
++import {
++  addU8Saturating,
++  addU8Wrapping,
++  cTrunc,
++  cosf,
++  f32,
++  maxU8,
++  sinf,
++  sqrtf,
++  u8,
++} from "./GeissNumeric.js";
++
++export interface ShadeBobParameters {
++  readonly c1: Float32Array;
++  readonly c2: Float32Array;
++  readonly c3: Float32Array;
++  readonly f1: Float32Array;
++  readonly f2: Float32Array;
++  readonly f3: Float32Array;
++  readonly f4: Float32Array;
++  readonly radius0: Float32Array;
++  readonly radius1: Float32Array;
++  readonly radius2: Float32Array;
++  readonly radius3: Float32Array;
++}
++
++export interface DotChaserState8 {
++  pointer: number;
++  readonly x: Int32Array;
++  readonly y: Int32Array;
++  readonly r: Uint8Array;
++  readonly g: Uint8Array;
++  readonly b: Uint8Array;
++}
++
++export interface ExactEffects8State {
++  width: number;
++  height: number;
++  centerX: number;
++  centerY: number;
++  /** `FX_YCUT`, used by source bounds. */
++  cut: number;
++  /** `FX_YCUT_HIDE`, used by Grid. */
++  hideCut: number;
++  fpsAtModeSwitch: number;
++  floatFrame: number;
++  intFrame: number;
++  chaserOffset: number;
++  mode: number;
++  centerDwindle: number;
++  solarMax: number;
++  gridDirection: -1 | 1;
++  soundActive: boolean;
++  soundEmpty: boolean;
++  readonly shade: ShadeBobParameters;
++  readonly dotChaser: DotChaserState8;
++}
++
++export interface ExactEffectSelection8 {
++  /** Source stores a count; normal selected value is one. */
++  shade: number;
++  /** 0=off, 1=first path, 2=both paths. */
++  chasers: 0 | 1 | 2;
++  bar: boolean;
++  dots: boolean;
++  nuclide: boolean;
++  grid: boolean;
++  solar: boolean;
++}
++
++const N_SHADE_BOBS = 10;
++const N_DOT_HISTORY = 20;
++
++/**
++ * Consume exactly the source's 110 random values used for the ten `micro_*`
++ * ShadeBob records. Call this at the matching point in global initialization.
++ */
++export function createShadeBobParameters(rng: RandomSource): ShadeBobParameters {
++  const c1 = new Float32Array(N_SHADE_BOBS);
++  const c2 = new Float32Array(N_SHADE_BOBS);
++  const c3 = new Float32Array(N_SHADE_BOBS);
++  const f1 = new Float32Array(N_SHADE_BOBS);
++  const f2 = new Float32Array(N_SHADE_BOBS);
++  const f3 = new Float32Array(N_SHADE_BOBS);
++  const f4 = new Float32Array(N_SHADE_BOBS);
++  const radius0 = new Float32Array(N_SHADE_BOBS);
++  const radius1 = new Float32Array(N_SHADE_BOBS);
++  const radius2 = new Float32Array(N_SHADE_BOBS);
++  const radius3 = new Float32Array(N_SHADE_BOBS);
++
++  for (let i = 0; i < N_SHADE_BOBS; i++) {
++    c1[i] = f32(0.08 + 0.09 * rng.nextInt(1000) * 0.001);
++    c2[i] = f32(0.08 + 0.09 * rng.nextInt(1000) * 0.001);
++    c3[i] = f32(0.08 + 0.09 * rng.nextInt(1000) * 0.001);
++    f1[i] = f32(0.1 + 0.05 * rng.nextInt(1000) * 0.001);
++    f2[i] = f32(0.1 + 0.05 * rng.nextInt(1000) * 0.001);
++    f3[i] = f32(0.1 + 0.05 * rng.nextInt(1000) * 0.001);
++    f4[i] = f32(0.1 + 0.05 * rng.nextInt(1000) * 0.001);
++    radius0[i] = f32(2 + 2.8 * rng.nextInt(1000) * 0.001);
++    radius1[i] = f32(2 + 2.8 * rng.nextInt(1000) * 0.001);
++    radius2[i] = f32(2 + 2.8 * rng.nextInt(1000) * 0.001);
++    radius3[i] = f32(2 + 2.8 * rng.nextInt(1000) * 0.001);
++  }
++
++  return { c1, c2, c3, f1, f2, f3, f4, radius0, radius1, radius2, radius3 };
++}
++
++export function createDotChaserState8(): DotChaserState8 {
++  const x = new Int32Array(N_DOT_HISTORY);
++  const y = new Int32Array(N_DOT_HISTORY);
++  x.fill(1);
++  y.fill(1);
++  return {
++    pointer: 0,
++    x,
++    y,
++    r: new Uint8Array(N_DOT_HISTORY),
++    g: new Uint8Array(N_DOT_HISTORY),
++    b: new Uint8Array(N_DOT_HISTORY),
++  };
++}
++
++function assertFrame(frame: Uint8Array, state: ExactEffects8State): void {
++  const expected = state.width * state.height;
++  if (frame.length < expected) {
++    throw new RangeError(`8-bit feedback buffer has ${frame.length} bytes, expected at least ${expected}`);
++  }
++  if (state.width < 30 || state.height < 16) {
++    throw new RangeError(`Unsupported Geiss effect surface ${state.width}x${state.height}`);
++  }
++}
++
++function addBelow250(frame: Uint8Array, index: number, amount: number): void {
++  if (frame[index]! < 250) addU8Wrapping(frame, index, amount);
++}
++
++/** `Effects.h::ShadeBobs`, 8-bit branch. */
++export function shadeBobs8(
++  frame: Uint8Array,
++  state: ExactEffects8State,
++  selectedCount: number,
++  rng: RandomSource,
++): void {
++  assertFrame(frame, state);
++  const count = Math.min(N_SHADE_BOBS, Math.max(0, cTrunc(selectedCount)));
++  const p = state.shade;
++  const ff = f32(state.floatFrame);
++
++  for (let i = 0; i < count; i++) {
++    // The RGB oscillators are evaluated by the source even in 8-bit mode.
++    cTrunc(1 + sinf(f32(ff * p.c1[i]!)));
++    cTrunc(1 + sinf(f32(ff * p.c2[i]!)));
++    cTrunc(1 + sinf(f32(ff * p.c3[i]!)));
++
++    let a = state.centerX + cTrunc(f32(
++      f32(p.radius0[i]! * cosf(f32(ff * p.f1[i]!)))
++      + f32(p.radius2[i]! * cosf(f32(ff * p.f2[i]!))),
++    ));
++    let b = state.centerY + cTrunc(f32(
++      f32(p.radius1[i]! * cosf(f32(ff * p.f3[i]!)))
++      + f32(p.radius3[i]! * cosf(f32(ff * p.f4[i]!))),
++    ));
++
++    for (let k = 0; k < 4; k++) {
++      b += rng.nextInt(5) - 2;
++      a += rng.nextInt(5) - 2;
++      if (b > state.cut && b < state.height - 1 - state.cut) {
++        const o = b * state.width + a;
++        addBelow250(frame, o, 2);
++        addBelow250(frame, o + 1, 1);
++        addBelow250(frame, o - 1, 1);
++        addBelow250(frame, o + state.width, 1);
++        addBelow250(frame, o - state.width, 1);
++      }
++    }
++  }
++}
++
++/** `Effects.h::Two_Chasers`, 8-bit branch. */
++export function twoChasers8(
++  frame: Uint8Array,
++  state: ExactEffects8State,
++  variant: 0 | 1 | 2,
++): void {
++  assertFrame(frame, state);
++  if (variant === 0) return;
++
++  const s = f32(state.width / 640);
++  let timeScale = f32(1);
++  if (state.fpsAtModeSwitch >= 10 && state.fpsAtModeSwitch < 120) {
++    timeScale = f32(30 / state.fpsAtModeSwitch);
++  }
++  let t = f32(f32(state.floatFrame + state.chaserOffset) * timeScale);
++  const passes = variant === 2 ? 2 : 1;
++  const samples = cTrunc(f32(20 * s));
++  if (samples <= 0) return;
++  const advance = f32(f32(f32(0.08 * timeScale) * 20) / samples);
++
++  for (let k = 0; k < samples; k++) {
++    t = f32(t + advance);
++    for (let pass = 0; pass < passes; pass++) {
++      let a: number;
++      let b: number;
++      if (pass === 0) {
++        a = state.centerX + cTrunc(f32(
++          f32(f32(s * 74) * cosf(f32(t * 0.1102 + 10)))
++          + f32(f32(s * 65) * cosf(f32(t * 0.1312 + 20))),
++        ));
++        b = state.centerY + cTrunc(f32(
++          f32(f32(s * 54) * cosf(f32(t * 0.1204 + 40)))
++          + f32(f32(s * 55) * cosf(f32(t * 0.1715 + 30))),
++        ));
++      } else {
++        a = state.centerX + cTrunc(f32(
++          f32(f32(s * 64) * cosf(f32(t * 0.1213 + 33)))
++          + f32(f32(s * 55) * cosf(f32(t * 0.1408 + 15))),
++        ));
++        b = state.centerY + cTrunc(f32(
++          f32(f32(s * 52) * cosf(f32(t * 0.1304 + 12)))
++          + f32(f32(s * 51) * cosf(f32(t * 0.1103 + 21))),
++        ));
++      }
++
++      if (b > state.cut && b < state.height - 1 - state.cut) {
++        const o = b * state.width + a;
++        frame[o] = u8(f32(255 - f32(f32(255 - frame[o]!) * 0.6)));
++      }
++    }
++  }
++}
++
++/** `Effects.h::Solid_Line`, 8-bit branch. */
++export function solidLine8(frame: Uint8Array, state: ExactEffects8State): void {
++  assertFrame(frame, state);
++  const speedMultiplier = f32(0.6);
++  let phase = f32(state.floatFrame + f32(state.chaserOffset * speedMultiplier));
++  phase = f32(f32(phase * 0.55) / f32(0.08 * 20));
++
++  if (state.width === 320) {
++    const x1 = f32(state.centerX + f32(
++      f32(12 * cosf(f32(phase * 0.1102 + 10)))
++      + f32(15 * cosf(f32(phase * 0.1312 + 20))),
++    ));
++    const y1 = f32(state.centerY + f32(
++      f32(11 * cosf(f32(phase * 0.1204 + 40)))
++      + f32(10 * cosf(f32(phase * 0.1715 + 30))),
++    ));
++    const x2 = f32(state.centerX + f32(
++      f32(10 * cosf(f32(phase * 0.1213 + 33)))
++      + f32(13 * cosf(f32(phase * 0.1408 + 15))),
++    ));
++    const y2 = f32(state.centerY + f32(
++      f32(9 * cosf(f32(phase * 0.1304 + 12)))
++      + f32(11 * cosf(f32(phase * 0.1103 + 21))),
++    ));
++
++    for (let k = 0; k < 43; k++) {
++      const ratio = f32(k / 43);
++      const inverse = f32(1 - ratio);
++      const a = cTrunc(f32(f32(x1 * ratio) + f32(x2 * inverse)));
++      const b = cTrunc(f32(f32(y1 * ratio) + f32(y2 * inverse)));
++      if (b > state.cut && b < state.height - 1 - state.cut) {
++        const o = b * 320 + a;
++        if (frame[o]! < 223) addU8Wrapping(frame, o, 16);
++      }
++    }
++    return;
++  }
++
++  const s = f32(state.width / 640);
++  const x1 = f32(state.centerX + f32(
++    f32(f32(s * 16) * cosf(f32(phase * 0.1102 + 10)))
++    + f32(f32(s * 15) * cosf(f32(phase * 0.1312 + 20))),
++  ));
++  const y1 = f32(state.centerY + f32(
++    f32(f32(s * 15) * cosf(f32(phase * 0.1204 + 40)))
++    + f32(f32(s * 10) * cosf(f32(phase * 0.1715 + 30))),
++  ));
++  const x2 = f32(state.centerX + f32(
++    f32(f32(s * 14) * cosf(f32(phase * 0.1213 + 33)))
++    + f32(f32(s * 13) * cosf(f32(phase * 0.1408 + 15))),
++  ));
++  const y2 = f32(state.centerY + f32(
++    f32(f32(s * 13) * cosf(f32(phase * 0.1304 + 12)))
++    + f32(f32(s * 11) * cosf(f32(phase * 0.1103 + 21))),
++  ));
++  const samples = cTrunc(f32(s * 50));
++  if (samples <= 0) return;
++  const inverseSamples = f32(1 / samples);
++
++  for (let k = 0; k < samples; k++) {
++    const ratio = f32(k * inverseSamples);
++    const inverse = f32(1 - ratio);
++    const a = cTrunc(f32(f32(x1 * ratio) + f32(x2 * inverse)));
++    const b = cTrunc(f32(f32(y1 * ratio) + f32(y2 * inverse)));
++    if (b > state.cut && b < state.height - 1 - state.cut) {
++      const o = b * state.width + a;
++      if (frame[o]! < 223) addU8Wrapping(frame, o, 16);
++    }
++  }
++}
++
++/** `Effects.h::One_Dotty_Chaser`, 8-bit branch. */
++export function dotChaser8(frame: Uint8Array, state: ExactEffects8State): void {
++  assertFrame(frame, state);
++  const s = f32(state.width / 640);
++  let t = f32(state.floatFrame);
++  if (state.fpsAtModeSwitch >= 10 && state.fpsAtModeSwitch < 120) {
++    t = f32(t * f32(30 / state.fpsAtModeSwitch));
++  }
++
++  const a = state.centerX + cTrunc(f32(
++    f32(f32(s * 64) * cosf(f32(t * 0.0613 + 33)))
++    + f32(f32(s * 55) * cosf(f32(t * 0.0708 + 15))),
++  ));
++  const b = state.centerY + cTrunc(f32(
++    f32(f32(s * 52) * cosf(f32(t * 0.0704 + 12)))
++    + f32(f32(s * 51) * cosf(f32(t * 0.0503 + 21))),
++  ));
++
++  if (b <= state.cut || b >= state.height - 1 - state.cut) return;
++
++  const chaser = state.dotChaser;
++  chaser.pointer = (chaser.pointer + 1) % N_DOT_HISTORY;
++  const p = chaser.pointer;
++  chaser.x[p] = a;
++  chaser.y[p] = b;
++  chaser.r[p] = u8(f32(127 + f32(126 * sinf(f32(t * 0.0613 + 33)))));
++  chaser.g[p] = u8(f32(127 + f32(126 * sinf(f32(t * 0.0713 + 30)))));
++  chaser.b[p] = u8(f32(127 + f32(126 * sinf(f32(t * 0.0513 + 27)))));
++
++  for (let k = 0; k < N_DOT_HISTORY; k++) {
++    const o = chaser.y[k]! * state.width + chaser.x[k]!;
++    frame[o] = chaser.r[k]!;
++    if (state.width >= 1050) {
++      frame[o + 1] = chaser.r[k]!;
++      frame[o + state.width] = chaser.r[k]!;
++      frame[o + state.width + 1] = chaser.r[k]!;
++    }
++    chaser.x[k] = chaser.x[k]! + 1;
++  }
++}
++
++/** `Effects.h::Nuclide`, the pre-warp silent/empty-sound 8-bit branch. */
++export function nuclidePreWarp8(
++  frame: Uint8Array,
++  state: ExactEffects8State,
++  rng: RandomSource,
++): void {
++  assertFrame(frame, state);
++  if (state.soundActive && !state.soundEmpty) return;
++  if (rng.nextInt(12) !== 0) return;
++
++  const nodes = 3 + rng.nextInt(5);
++  const phase = rng.nextInt(1000);
++  rng.nextInt(30); // source initializes `rad = 20 + rand()%30`, then overwrites it
++  let radius: number;
++  let blobRadius: number;
++  if (state.width === 320) {
++    blobRadius = 2 + rng.nextInt(6);
++    radius = 22 + rng.nextInt(6);
++  } else {
++    blobRadius = 3 + rng.nextInt(8);
++    radius = 34 + rng.nextInt(8);
++  }
++
++  for (let n = 0; n < nodes; n++) {
++    const angle = f32(f32(n / nodes * 6.28) + phase);
++    const cx = state.centerX + cTrunc(f32(radius * cosf(angle)));
++    const cy = state.centerY + cTrunc(f32(radius * sinf(angle)));
++    if (cy - 10 <= state.cut || cy + 10 >= state.height - 1 - state.cut) continue;
++
++    const center = cy * state.width + cx;
++    for (let x = -10; x < 10; x++) {
++      for (let y = -10; y < 10; y++) {
++        const value = cTrunc(f32(f32(blobRadius - sqrtf(x * x + y * y)) * 25));
++        if (value > 0) addU8Saturating(frame, center + y * state.width + x, value);
++      }
++    }
++  }
++}
++
++function solarParticleCount8(state: ExactEffects8State): number {
++  let fx: number;
++  if (state.width === 320) {
++    fx = cTrunc(f32(3 + f32(state.solarMax * f32(
++      2.4
++      + f32(0.35 * sinf(f32(state.intFrame * 0.05)))
++      + f32(0.4 * sinf(f32(state.intFrame * 0.038 + 1))),
++    ))));
++    return cTrunc(f32(fx * 0.01));
++  }
++
++  fx = cTrunc(f32(
++    3
++    + f32(state.solarMax * 1.6)
++    + f32(state.solarMax * 0.43 * sinf(f32(state.intFrame * 0.05)))
++    + f32(state.solarMax * 0.43 * sinf(f32(state.intFrame * 0.038 + 1))),
++  ));
++  return cTrunc(f32(fx * 0.05));
++}
++
++/** `Drop_Solar_Particles_320`, 8-bit branch. */
++export function solarParticles320_8(
++  frame: Uint8Array,
++  state: ExactEffects8State,
++  count: number,
++  rng: RandomSource,
++): void {
++  let particles = cTrunc(count) * 4;
++  while (particles-- > 0) {
++    let x = 0;
++    let y = 0;
++    let distance = f32(100);
++    while (distance >= 17) {
++      y = rng.nextInt(48) - 24;
++      x = rng.nextInt(64) - 32;
++      distance = sqrtf(x * x + y * y);
++    }
++    y += state.centerY;
++    x += state.centerX;
++    if (y <= state.cut || y >= state.height - 1 - state.cut) continue;
++
++    const o = y * 320 + x;
++    rng.nextInt(256); // p1: consumed before the source overwrites i0
++    rng.nextInt(256); // p2: consumed for the inactive true-color branch
++    rng.nextInt(256); // p3: consumed for the inactive true-color branch
++    const i0 = 2 + rng.nextInt(3);
++    const i1 = cTrunc(i0 / 2);
++    const i2 = cTrunc(i1 / 2);
++    if (frame[o]! < 207 - i0) {
++      addU8Wrapping(frame, o, i0);
++      addU8Wrapping(frame, o + 1, i1);
++      addU8Wrapping(frame, o - 1, i1);
++      addU8Wrapping(frame, o + 320, i1);
++      addU8Wrapping(frame, o - 320, i1);
++      addU8Wrapping(frame, o - 321, i2);
++      addU8Wrapping(frame, o - 319, i2);
++      addU8Wrapping(frame, o + 319, i2);
++      addU8Wrapping(frame, o + 321, i2);
++    }
++  }
++}
++
++/** `Drop_Solar_Particles`, 8-bit branch. */
++export function solarParticles8(
++  frame: Uint8Array,
++  state: ExactEffects8State,
++  count: number,
++  rng: RandomSource,
++): void {
++  let particles = cTrunc(count) * 4;
++  while (particles-- > 0) {
++    let x = 0;
++    let y = 0;
++    let distance = f32(100);
++    while (distance >= 35) {
++      y = rng.nextInt(72) - 36;
++      x = rng.nextInt(96) - 48;
++      distance = sqrtf(x * x + y * y);
++    }
++    y += state.centerY;
++    x += state.centerX;
++    if (y <= state.cut || y >= state.height - 1 - state.cut) continue;
++
++    const o = y * state.width + x;
++    const i0 = cTrunc(f32(2 + rng.nextInt(2) + f32(f32(35 - distance) / 9)));
++    const i1 = i0 - 1;
++    const i2 = i1 - 1;
++    if (frame[o]! < 207 - i0) {
++      addU8Wrapping(frame, o, i0);
++      addU8Wrapping(frame, o + 1, i1);
++      addU8Wrapping(frame, o - 1, i1);
++      addU8Wrapping(frame, o + state.width, i1);
++      addU8Wrapping(frame, o - state.width, i1);
++      addU8Wrapping(frame, o - state.width - 1, i2);
++      addU8Wrapping(frame, o - state.width + 1, i2);
++      addU8Wrapping(frame, o + state.width - 1, i2);
++      addU8Wrapping(frame, o + state.width + 1, i2);
++    }
++  }
++}
++
++export function selectedSolarParticles8(
++  frame: Uint8Array,
++  state: ExactEffects8State,
++  rng: RandomSource,
++): void {
++  const count = solarParticleCount8(state);
++  if (state.width === 320) solarParticles320_8(frame, state, count, rng);
++  else solarParticles8(frame, state, count, rng);
++}
++
++/** `Effects.h::Grid`, 8-bit branch. */
++export function grid8(frame: Uint8Array, state: ExactEffects8State): void {
++  assertFrame(frame, state);
++  const xIncrement = cTrunc(state.width / 30);
++  const yIncrement = xIncrement;
++  if (xIncrement <= 0) return;
++  const fpsScale = f32(30 / state.fpsAtModeSwitch);
++  const brightness = u8(Math.max(0, f32(
++    65
++    + f32(45 * sinf(f32(state.intFrame * 0.06033 * fpsScale)))
++    + f32(35 * cosf(f32(state.intFrame * 0.04710 * fpsScale + 1)))
++    + f32(25 * cosf(f32(state.intFrame * 0.00523 * fpsScale - 1))),
++  )));
++
++  let direction = state.intFrame % xIncrement;
++  if (state.gridDirection === 1) direction *= -1;
++
++  for (let y = state.hideCut; y < state.height - state.hideCut; y += yIncrement) {
++    const row = y * state.width;
++    if (state.width >= 1700) {
++      for (let x = 0; x < state.width - 1; x += xIncrement) {
++        const o = row + x + direction;
++        maxU8(frame, o, brightness);
++        maxU8(frame, o + 1, brightness);
++        maxU8(frame, o + state.width, brightness);
++        maxU8(frame, o + state.width + 1, brightness);
++      }
++    } else {
++      for (let x = 0; x < state.width; x += xIncrement) {
++        maxU8(frame, row + x + direction, brightness);
++      }
++    }
++  }
++}
++
++/** `Effects.h::Diminish_Center`, 8-bit branch. */
++export function diminishCenter8(frame: Uint8Array, state: ExactEffects8State): void {
++  assertFrame(frame, state);
++  if (state.centerDwindle >= 0.999) return;
++  const d = f32(state.centerDwindle);
++
++  if (state.mode !== 12) {
++    const center = state.centerY * state.width + state.centerX;
++    const offsets = [center, center - 1, center + 1, center + state.width, center - state.width] as const;
++    for (const o of offsets) {
++      if (frame[o]! > 1) frame[o] = u8(f32(frame[o]! * d));
++    }
++    return;
++  }
++
++  let o = state.cut * state.width + state.centerX;
++  for (let y = state.cut; y < state.height - state.cut; y++) {
++    frame[o - 1] = u8(f32(frame[o - 1]! * d));
++    frame[o] = u8(f32(frame[o]! * d));
++    frame[o + 1] = u8(f32(frame[o + 1]! * d));
++    o += state.width;
++  }
++}
++
++/** Execute the complete active 8-bit pre-warp effect chain in source order. */
++export function renderExactEffects8(
++  frame: Uint8Array,
++  state: ExactEffects8State,
++  selection: ExactEffectSelection8,
++  rng: RandomSource,
++): void {
++  if (selection.shade > 0) shadeBobs8(frame, state, selection.shade, rng);
++  if (selection.chasers > 0) twoChasers8(frame, state, selection.chasers);
++  if (selection.bar) solidLine8(frame, state);
++  if (selection.dots) dotChaser8(frame, state);
++  if (selection.nuclide) nuclidePreWarp8(frame, state, rng);
++  if (selection.grid) grid8(frame, state);
++  if (selection.solar) selectedSolarParticles8(frame, state, rng);
++  diminishCenter8(frame, state);
++}
+diff --git a/packages/bergium/src/pipelines/geiss/reference/ExactMapBuilder.ts b/packages/bergium/src/pipelines/geiss/reference/ExactMapBuilder.ts
+new file mode 100644
+index 0000000..75febb1
+--- /dev/null
++++ b/packages/bergium/src/pipelines/geiss/reference/ExactMapBuilder.ts
+@@ -0,0 +1,106 @@
++/**
++ * Source-timed pending-map construction.
++ *
++ * Geiss does not normally generate a complete map at mode switch. It advances a
++ * linear `y_map_pos` budget each frame. This matters for mode 14 because every
++ * generated pixel consumes the global `rand()` stream; eager generation changes
++ * later effect, palette and title choices even if the final map is identical.
++ */
++
++import type { MapParameters, MapTexel, RandomSource } from "./MapField.js";
++import { quantizeMapTexelExact } from "./MapField.js";
++import { interpolationWeightSum } from "./ClassicConfig.js";
++
++export interface ExactMapProgress {
++  readonly generatedPixels: number;
++  readonly totalActivePixels: number;
++  readonly frameCount: number;
++  readonly complete: boolean;
++}
++
++function identityTexel(x: number, y: number, p: MapParameters): MapTexel {
++  const sum = Math.trunc(p.weightSum * interpolationWeightSum(p.width, p.height) / 256) & 0xff;
++  return { sourceX: x, sourceY: y, w00: sum, w10: 0, w01: 0, w11: 0 };
++}
++
++export class ExactMapBuilder {
++  private readonly map: MapTexel[];
++  private readonly start: number;
++  private readonly end: number;
++  private position: number;
++  private framesCrunching = 0;
++
++  public constructor(
++    private readonly parameters: MapParameters,
++    private readonly cut: number,
++    private readonly framesTillAutoSwitch: number,
++    private readonly rng: RandomSource,
++  ) {
++    const { width, height } = parameters;
++    if (!Number.isInteger(cut) || cut < 0 || cut * 2 >= height) {
++      throw new RangeError(`Invalid map cut ${cut} for height ${height}`);
++    }
++    if (!Number.isInteger(framesTillAutoSwitch) || framesTillAutoSwitch <= 0) {
++      throw new RangeError(`framesTillAutoSwitch must be positive, got ${framesTillAutoSwitch}`);
++    }
++
++    this.start = cut * width;
++    this.end = (height - cut) * width;
++    this.position = this.start;
++    this.map = new Array<MapTexel>(width * height);
++
++    // Process_Map only covers active rows. Identity border entries make the
++    // portable full-frame backend deterministic without consuming RNG.
++    for (let y = 0; y < cut; y++) {
++      for (let x = 0; x < width; x++) this.map[y * width + x] = identityTexel(x, y, parameters);
++    }
++    for (let y = height - cut; y < height; y++) {
++      for (let x = 0; x < width; x++) this.map[y * width + x] = identityTexel(x, y, parameters);
++    }
++  }
++
++  /**
++   * Generate exactly this frame's source budget. `rush=true` finishes the active
++   * map immediately but still consumes random values in raster order.
++   */
++  public step(rush = false): ExactMapProgress {
++    if (this.position >= this.end) return this.progress();
++    this.framesCrunching++;
++
++    const { width, height } = this.parameters;
++    const activeRows = height - this.cut * 2;
++    let endPosition = width * (
++      this.cut + (this.framesCrunching / this.framesTillAutoSwitch) * activeRows
++    );
++    endPosition = Math.trunc(endPosition);
++    if (rush || endPosition > this.end) endPosition = this.end;
++
++    for (; this.position < endPosition; this.position++) {
++      const y = Math.trunc(this.position / width);
++      const x = this.position - y * width;
++      this.map[this.position] = quantizeMapTexelExact(x, y, this.parameters, this.rng);
++    }
++    return this.progress();
++  }
++
++  public progress(): ExactMapProgress {
++    return {
++      generatedPixels: this.position - this.start,
++      totalActivePixels: this.end - this.start,
++      frameCount: this.framesCrunching,
++      complete: this.position >= this.end,
++    };
++  }
++
++  public currentMap(): readonly MapTexel[] {
++    if (this.position < this.end) {
++      throw new Error(`Pending map is incomplete: ${this.position - this.start}/${this.end - this.start} pixels`);
++    }
++    return this.map;
++  }
++
++  /** Test/debug view. Entries after the current position may still be undefined. */
++  public partialMap(): readonly (MapTexel | undefined)[] {
++    return this.map;
++  }
++}
+diff --git a/packages/bergium/src/pipelines/geiss/reference/GeissClassicFrame8.ts b/packages/bergium/src/pipelines/geiss/reference/GeissClassicFrame8.ts
+new file mode 100644
+index 0000000..3ddcd0e
+--- /dev/null
++++ b/packages/bergium/src/pipelines/geiss/reference/GeissClassicFrame8.ts
+@@ -0,0 +1,106 @@
++/**
++ * Allocation-free portable 8-bit classic frame executor.
++ *
++ * This is the integration seam for the source-shaped CPU backend. It preserves
++ * Geiss's observable pass order while deliberately naming the current warp as
++ * `portable-four-tap`; the active historical x86 pair-accumulator kernel must be
++ * added as a separate backend rather than falsely relabeling this implementation.
++ */
++
++import type { RandomSource, MapTexel } from "./MapField.js";
++import { warpIntensity8, type IntensityFrame } from "./FeedbackWarp.js";
++import {
++  renderExactEffects8,
++  type ExactEffectSelection8,
++  type ExactEffects8State,
++} from "./ExactEffects8.js";
++import { renderWave, type WaveRenderInput } from "./WaveformRenderer.js";
++import { advanceFrameClock, createFrameClock, type FrameClock } from "./FrameClock.js";
++
++export type GeissWarp8Profile = "portable-four-tap";
++
++export interface GeissClassicFrame8Step {
++  readonly fps: number;
++  readonly effects: ExactEffectSelection8;
++  /** Ordered post-warp mutation, e.g. RenderDots/audio-triggered Nuclide. */
++  readonly postWarp?: (frame: IntensityFrame) => void;
++  /** Waveform is always written after the warp and post-warp dots. */
++  readonly waveform?: Omit<WaveRenderInput, "frame">;
++}
++
++export class GeissClassicFrame8 {
++  public readonly warpProfile: GeissWarp8Profile = "portable-four-tap";
++  public readonly clock: FrameClock = createFrameClock();
++
++  private front: IntensityFrame;
++  private back: IntensityFrame;
++  private map: readonly MapTexel[];
++
++  public constructor(
++    private readonly width: number,
++    private readonly height: number,
++    map: readonly MapTexel[],
++    private readonly effectState: ExactEffects8State,
++    private readonly rng: RandomSource,
++  ) {
++    const pixels = width * height;
++    if (map.length !== pixels) {
++      throw new RangeError(`Map has ${map.length} entries, expected ${pixels}`);
++    }
++    if (effectState.width !== width || effectState.height !== height) {
++      throw new RangeError("Effect state dimensions do not match the frame executor");
++    }
++    this.map = map;
++    // The source allocates safety padding. Typed arrays make out-of-range writes a
++    // no-op, but retaining padding also makes source-adjacent effects auditable.
++    this.front = new Uint8Array(pixels + 2048);
++    this.back = new Uint8Array(pixels + 2048);
++  }
++
++  public setMap(map: readonly MapTexel[]): void {
++    if (map.length !== this.width * this.height) {
++      throw new RangeError(`Map has ${map.length} entries, expected ${this.width * this.height}`);
++    }
++    this.map = map;
++  }
++
++  /** Source initialization is zero; explicit seeding exists only for fixtures. */
++  public seedFront(bytes: Uint8Array): void {
++    if (bytes.length !== this.width * this.height) {
++      throw new RangeError(`Seed has ${bytes.length} bytes, expected ${this.width * this.height}`);
++    }
++    this.front.fill(0);
++    this.front.set(bytes);
++  }
++
++  public clear(): void {
++    this.front.fill(0);
++    this.back.fill(0);
++  }
++
++  public step(input: GeissClassicFrame8Step): Uint8Array {
++    // `RenderFX` advances these counters before evaluating any effect.
++    advanceFrameClock(this.clock, input.fps);
++    this.effectState.floatFrame = this.clock.floatframe;
++    this.effectState.intFrame = this.clock.intframe;
++
++    renderExactEffects8(this.front, this.effectState, input.effects, this.rng);
++    warpIntensity8(this.front, this.back, this.map, this.width);
++    input.postWarp?.(this.back);
++    if (input.waveform) renderWave({ ...input.waveform, frame: this.back });
++
++    const previous = this.front;
++    this.front = this.back;
++    this.back = previous;
++    return this.currentFrame();
++  }
++
++  /** Visible scalar frame; safety padding is never exposed to presentation. */
++  public currentFrame(): Uint8Array {
++    return this.front.subarray(0, this.width * this.height);
++  }
++
++  public scratchBackFrame(): Uint8Array {
++    return this.back.subarray(0, this.width * this.height);
++  }
++}
+diff --git a/packages/bergium/src/pipelines/geiss/reference/GeissInitialization8.ts b/packages/bergium/src/pipelines/geiss/reference/GeissInitialization8.ts
+new file mode 100644
+index 0000000..98495f0
+--- /dev/null
++++ b/packages/bergium/src/pipelines/geiss/reference/GeissInitialization8.ts
+@@ -0,0 +1,85 @@
++/**
++ * Geiss 4.30 8-bit initialization in global RNG consumption order.
++ *
++ * Source: `main.cpp::FX_Init`. This object intentionally owns values that look
++ * unrelated: splitting them into independently seeded helpers changes every
++ * later mode/effect/palette decision.
++ */
++
++import { f32 } from "./GeissNumeric.js";
++import { MsvcRandom } from "./MsvcRandom.js";
++import {
++  createDotChaserState8,
++  createShadeBobParameters,
++  type ExactEffects8State,
++} from "./ExactEffects8.js";
++
++export interface GeissInitialization8Options {
++  readonly seed: number;
++  readonly width: number;
++  readonly height: number;
++  readonly centerX: number;
++  readonly centerY: number;
++  readonly cut?: number;
++  readonly hideCut?: number;
++  readonly fpsAtModeSwitch?: number;
++}
++
++export interface GeissInitialization8Result {
++  readonly rng: MsvcRandom;
++  readonly effectState: ExactEffects8State;
++  readonly scatter: Float32Array;
++  readonly paletteFrequencies: Float32Array;
++  readonly mode7RandomArray: Float32Array;
++}
++
++const SCATTER_VALUES = 226;
++const MODE7_RANDOM_VALUES = 2345;
++
++export function initializeGeiss8(options: GeissInitialization8Options): GeissInitialization8Result {
++  const rng = new MsvcRandom(options.seed);
++
++  // Exact first RNG consumer in FX_Init after srand().
++  const chaserOffset = rng.nextInt(40000);
++
++  const scatter = new Float32Array(SCATTER_VALUES);
++  for (let i = 0; i < scatter.length; i++) {
++    scatter[i] = f32(0.05 - 0.025 * rng.nextInt(1000) * 0.001);
++  }
++
++  // chaser_x/y and sqrt_tab consume no randomness.
++  const shade = createShadeBobParameters(rng);
++
++  const paletteFrequencies = new Float32Array(6);
++  for (let i = 0; i < paletteFrequencies.length; i++) {
++    paletteFrequencies[i] = f32(rng.nextInt(1000) * 0.001 * 0.01 + 0.02);
++  }
++
++  const mode7RandomArray = new Float32Array(MODE7_RANDOM_VALUES);
++  for (let i = 0; i < mode7RandomArray.length; i++) {
++    mode7RandomArray[i] = f32(rng.nextInt(100) * 0.0005);
++  }
++
++  const effectState: ExactEffects8State = {
++    width: options.width,
++    height: options.height,
++    centerX: options.centerX,
++    centerY: options.centerY,
++    cut: options.cut ?? 4,
++    hideCut: options.hideCut ?? 4,
++    fpsAtModeSwitch: options.fpsAtModeSwitch ?? 30,
++    floatFrame: 0,
++    intFrame: 0,
++    chaserOffset,
++    mode: 1,
++    centerDwindle: 1,
++    solarMax: 400,
++    gridDirection: -1,
++    soundActive: false,
++    soundEmpty: true,
++    shade,
++    dotChaser: createDotChaserState8(),
++  };
++
++  return { rng, effectState, scatter, paletteFrequencies, mode7RandomArray };
++}
+diff --git a/packages/bergium/src/pipelines/geiss/reference/GeissNumeric.ts b/packages/bergium/src/pipelines/geiss/reference/GeissNumeric.ts
+new file mode 100644
+index 0000000..ad47342
+--- /dev/null
++++ b/packages/bergium/src/pipelines/geiss/reference/GeissNumeric.ts
+@@ -0,0 +1,67 @@
++/**
++ * Explicit numeric operations used by the Geiss compatibility profiles.
++ *
++ * The original renderer relies on C/C++ conversion rules that JavaScript usually
++ * approximates accidentally. Keeping those rules named makes byte behavior
++ * reviewable and prevents "helpful" clamps from changing the feedback system.
++ */
++
++/** Round a value to IEEE-754 binary32, matching assignment to a C `float`. */
++export const f32 = Math.fround;
++
++/** C/C++ float-to-integer conversion for finite values: truncate toward zero. */
++export function cTrunc(value: number): number {
++  if (!Number.isFinite(value)) {
++    throw new RangeError(`Cannot convert non-finite value ${value} to a C integer`);
++  }
++  return Math.trunc(value);
++}
++
++/** Assignment/conversion to an unsigned 8-bit byte. */
++export function u8(value: number): number {
++  return cTrunc(value) & 0xff;
++}
++
++/** Assignment/conversion to a signed 8-bit integer. */
++export function i8(value: number): number {
++  const byte = u8(value);
++  return byte < 0x80 ? byte : byte - 0x100;
++}
++
++/** Assignment/conversion to a signed 16-bit integer. */
++export function i16(value: number): number {
++  const word = cTrunc(value) & 0xffff;
++  return word < 0x8000 ? word : word - 0x10000;
++}
++
++/** `sinf`-shaped operation: binary32 input and binary32 result. */
++export function sinf(value: number): number {
++  return f32(Math.sin(f32(value)));
++}
++
++/** `cosf`-shaped operation: binary32 input and binary32 result. */
++export function cosf(value: number): number {
++  return f32(Math.cos(f32(value)));
++}
++
++/** `sqrtf`-shaped operation: binary32 input and binary32 result. */
++export function sqrtf(value: number): number {
++  return f32(Math.sqrt(f32(value)));
++}
++
++/** Unsigned-byte `+=` semantics: integer promotion followed by byte wrapping. */
++export function addU8Wrapping(frame: Uint8Array, index: number, value: number): void {
++  frame[index] = u8(frame[index]! + cTrunc(value));
++}
++
++/** Saturating byte addition used by the Nuclide effects. */
++export function addU8Saturating(frame: Uint8Array, index: number, value: number): void {
++  const next = frame[index]! + cTrunc(value);
++  frame[index] = next > 255 ? 255 : next < 0 ? 0 : next;
++}
++
++/** Source-style maximum write with byte conversion. */
++export function maxU8(frame: Uint8Array, index: number, value: number): void {
++  const byte = u8(value);
++  if (frame[index]! < byte) frame[index] = byte;
++}
+diff --git a/packages/bergium/src/pipelines/geiss/reference/MapField.ts b/packages/bergium/src/pipelines/geiss/reference/MapField.ts
+index ce31daa..f434fde 100644
+--- a/packages/bergium/src/pipelines/geiss/reference/MapField.ts
++++ b/packages/bergium/src/pipelines/geiss/reference/MapField.ts
+@@ -1,4 +1,5 @@
+ import { CUSTOM_VECTORS, ROTATION_DITHER, interpolationWeightSum } from "./ClassicConfig.js";
++import { cTrunc, u8 } from "./GeissNumeric.js";
+ 
+ export interface RandomSource { nextRaw(): number; nextInt(maxExclusive: number): number; nextFloat(): number; }
+ export interface Influence { x: number; y: number; i: number; j: number; type: 0 | 1 | 2; }
+@@ -71,21 +72,64 @@ export function sourceCoordinate(x: number, y: number, p: MapParameters, rng: Ra
+   return [sx, sy];
+ }
+ 
+-export function quantizeMapTexel(x: number, y: number, p: MapParameters, rng: RandomSource): MapTexel {
++export type MapQuantizationProfile = "safe-floor" | "source-trunc-wrap";
++
++/**
++ * Quantize one destination-to-source map entry.
++ *
++ * `safe-floor` is the previous portable behavior: fractions stay in [0,1) and
++ * weights form a convex combination. `source-trunc-wrap` reproduces the active C
++ * map builder: `(int)` truncates toward zero, fractions may become negative, and
++ * each independently computed weight is cast to `unsigned char` (wrapping mod
++ * 256). The latter can look suspicious but is reachable source behavior.
++ */
++export function quantizeMapTexelWithProfile(
++  x: number,
++  y: number,
++  p: MapParameters,
++  rng: RandomSource,
++  profile: MapQuantizationProfile,
++): MapTexel {
+   let [sx, sy] = sourceCoordinate(x, y, p, rng);
+-  let damping = p.damping * 30 / p.fpsAtModeSwitch;
++  const damping = p.damping * 30 / p.fpsAtModeSwitch;
+   // p.damping is already clamped and halved for dampened modes at map init.
+-  sx = x * (1 - damping) + sx * damping; sy = y * (1 - damping) + sy * damping;
+-  while (sx < 0) sx += p.width - 1; while (sx > p.width - 1) sx -= p.width - 1;
+-  // Floor (not trunc) so the bilinear fraction is always in [0,1): a source
+-  // coordinate can be negative (Y has no wrap and scale can push it below 0), and
+-  // trunc(-0.3) == 0 would give a negative fraction that &255 wraps into an invalid
+-  // weight. Floor keeps the four taps a proper convex combination.
+-  let ix = Math.floor(sx), iy = Math.floor(sy);
+-  let flat = iy * p.width + ix;
++  sx = x * (1 - damping) + sx * damping;
++  sy = y * (1 - damping) + sy * damping;
++  while (sx < 0) sx += p.width - 1;
++  while (sx > p.width - 1) sx -= p.width - 1;
++
++  const rawX = profile === "source-trunc-wrap" ? cTrunc(sx) : Math.floor(sx);
++  const rawY = profile === "source-trunc-wrap" ? cTrunc(sy) : Math.floor(sy);
++  let flat = rawY * p.width + rawX;
+   flat = Math.max(p.width * 2, Math.min(p.width * (p.height - 3) - 1, flat));
+-  iy = Math.trunc(flat / p.width); ix = flat % p.width;
+-  const fx = sx - Math.floor(sx), fy = sy - Math.floor(sy);
+-  const sum = Math.trunc(p.weightSum * interpolationWeightSum(p.width, p.height) / 256);
+-  return { sourceX: ix, sourceY: iy, w00: Math.trunc((1 - fx) * (1 - fy) * sum) & 255, w10: Math.trunc(fx * (1 - fy) * sum) & 255, w01: Math.trunc((1 - fx) * fy * sum) & 255, w11: Math.trunc(fx * fy * sum) & 255 };
++  const sourceY = cTrunc(flat / p.width);
++  const sourceX = flat - sourceY * p.width;
++
++  // The source computes the fractions from the pre-clamp `(int)newx/newy`, not
++  // from the clamped flattened address. Preserve that distinction.
++  const fx = sx - rawX;
++  const fy = sy - rawY;
++  const sum = cTrunc(p.weightSum * interpolationWeightSum(p.width, p.height) / 256);
++  const castWeight = profile === "source-trunc-wrap"
++    ? u8
++    : (value: number): number => cTrunc(value) & 0xff;
++
++  return {
++    sourceX,
++    sourceY,
++    w00: castWeight((1 - fx) * (1 - fy) * sum),
++    w10: castWeight(fx * (1 - fy) * sum),
++    w01: castWeight((1 - fx) * fy * sum),
++    w11: castWeight(fx * fy * sum),
++  };
++}
++
++/** Existing portable/safe behavior. */
++export function quantizeMapTexel(x: number, y: number, p: MapParameters, rng: RandomSource): MapTexel {
++  return quantizeMapTexelWithProfile(x, y, p, rng, "safe-floor");
++}
++
++/** Source C `(int)` plus `unsigned char` weight semantics. */
++export function quantizeMapTexelExact(x: number, y: number, p: MapParameters, rng: RandomSource): MapTexel {
++  return quantizeMapTexelWithProfile(x, y, p, rng, "source-trunc-wrap");
+ }
+diff --git a/packages/bergium/src/pipelines/geiss/reference/MsvcRandom.ts b/packages/bergium/src/pipelines/geiss/reference/MsvcRandom.ts
+index b6f6112..24b6eee 100644
+--- a/packages/bergium/src/pipelines/geiss/reference/MsvcRandom.ts
++++ b/packages/bergium/src/pipelines/geiss/reference/MsvcRandom.ts
+@@ -1,16 +1,58 @@
+ import type { RandomSource } from "./MapField.js";
+ 
++export interface MsvcRandomCheckpoint {
++  readonly state: number;
++  readonly calls: number;
++}
++
+ /**
+  * Declared exact-profile PRNG: the Visual C runtime `rand()` LCG
+- * (state = state*214013 + 2531011; raw = (state >>> 16) & 0x7fff). The output is
+- * pinned to the canonical MSVC sequence by `tests/oracle/msvc-random.test.ts`; the
+- * pinned Geiss C source is a read-only reference, never built or instrumented.
++ * (state = state*214013 + 2531011; raw = (state >>> 16) & 0x7fff).
++ *
++ * The call counter is part of the compatibility state. Two implementations can
++ * produce the same first few values yet diverge visually after consuming a
++ * different number of random values during map/effect initialization.
+  */
+ export class MsvcRandom implements RandomSource {
+   private state: number;
+-  public constructor(seed: number) { this.state = seed >>> 0; }
+-  public nextRaw(): number { this.state = (Math.imul(this.state, 214013) + 2531011) >>> 0; return (this.state >>> 16) & 0x7fff; }
+-  public nextInt(maxExclusive: number): number { return this.nextRaw() % maxExclusive; }
+-  public nextFloat(): number { return this.nextRaw() / 32768; }
+-  public snapshot(): number { return this.state; }
++  private calls = 0;
++
++  public constructor(seed: number) {
++    this.state = seed >>> 0;
++  }
++
++  public nextRaw(): number {
++    this.state = (Math.imul(this.state, 214013) + 2531011) >>> 0;
++    this.calls++;
++    return (this.state >>> 16) & 0x7fff;
++  }
++
++  public nextInt(maxExclusive: number): number {
++    if (!Number.isInteger(maxExclusive) || maxExclusive <= 0) {
++      throw new RangeError(`maxExclusive must be a positive integer, got ${maxExclusive}`);
++    }
++    return this.nextRaw() % maxExclusive;
++  }
++
++  public nextFloat(): number {
++    return this.nextRaw() / 32768;
++  }
++
++  /** Backward-compatible raw-state accessor used by existing tests. */
++  public snapshot(): number {
++    return this.state;
++  }
++
++  public checkpoint(): MsvcRandomCheckpoint {
++    return { state: this.state, calls: this.calls };
++  }
++
++  public restore(checkpoint: MsvcRandomCheckpoint): void {
++    this.state = checkpoint.state >>> 0;
++    this.calls = checkpoint.calls;
++  }
++
++  public get callCount(): number {
++    return this.calls;
++  }
+ }
+diff --git a/packages/bergium/tests/oracle/geiss-exact-effects8.test.ts b/packages/bergium/tests/oracle/geiss-exact-effects8.test.ts
+new file mode 100644
+index 0000000..c6a4440
+--- /dev/null
++++ b/packages/bergium/tests/oracle/geiss-exact-effects8.test.ts
+@@ -0,0 +1,115 @@
++import { test } from "vitest";
++import assert from "node:assert/strict";
++import {
++  createDotChaserState8,
++  createShadeBobParameters,
++  diminishCenter8,
++  dotChaser8,
++  grid8,
++  shadeBobs8,
++  solidLine8,
++  twoChasers8,
++  type ExactEffects8State,
++  type ShadeBobParameters,
++} from "../../src/pipelines/geiss/reference/ExactEffects8.js";
++import { MsvcRandom } from "../../src/pipelines/geiss/reference/MsvcRandom.js";
++
++function fnv1a64(data: Uint8Array): string {
++  let hash = 0xcbf29ce484222325n;
++  for (const byte of data) {
++    hash ^= BigInt(byte);
++    hash = BigInt.asUintN(64, hash * 0x100000001b3n);
++  }
++  return hash.toString(16).padStart(16, "0");
++}
++
++function zeroShade(): ShadeBobParameters {
++  const a = (): Float32Array => new Float32Array(10);
++  return {
++    c1: a(), c2: a(), c3: a(),
++    f1: a(), f2: a(), f3: a(), f4: a(),
++    radius0: a(), radius1: a(), radius2: a(), radius3: a(),
++  };
++}
++
++function state(shade: ShadeBobParameters): ExactEffects8State {
++  return {
++    width: 640,
++    height: 480,
++    centerX: 320,
++    centerY: 240,
++    cut: 4,
++    hideCut: 4,
++    fpsAtModeSwitch: 30,
++    floatFrame: 123.25,
++    intFrame: 77,
++    chaserOffset: 1234,
++    mode: 4,
++    centerDwindle: 0.98,
++    solarMax: 34,
++    gridDirection: -1,
++    soundActive: true,
++    soundEmpty: false,
++    shade,
++    dotChaser: createDotChaserState8(),
++  };
++}
++
++test("ShadeBobs performs four ordered jitter writes and consumes eight random values", () => {
++  const frame = new Uint8Array(640 * 480);
++  const effectState = state(zeroShade());
++  // nextInt(5) == 2 on every call => zero X/Y jitter.
++  const rng = {
++    calls: 0,
++    nextRaw(): number { this.calls++; return 2; },
++    nextInt(maxExclusive: number): number { assert.equal(maxExclusive, 5); return this.nextRaw(); },
++    nextFloat(): number { return this.nextRaw() / 32768; },
++  };
++
++  shadeBobs8(frame, effectState, 1, rng);
++  const center = effectState.centerY * effectState.width + effectState.centerX;
++  assert.equal(frame[center], 8);
++  assert.equal(frame[center - 1], 4);
++  assert.equal(frame[center + 1], 4);
++  assert.equal(frame[center - effectState.width], 4);
++  assert.equal(frame[center + effectState.width], 4);
++  assert.equal(rng.calls, 8);
++});
++
++test("exact 8-bit effect stages match the independent C fixture", () => {
++  const width = 640;
++  const height = 480;
++  // Extra bytes mirror the source allocation safety margin; the fixture hashes
++  // only the visible W*H scalar frame.
++  const frame = new Uint8Array(width * height + 2048);
++  for (let i = 0; i < width * height; i++) {
++    frame[i] = (i * 17 + Math.trunc(i / width) * 3) & 0xff;
++  }
++
++  const rng = new MsvcRandom(1);
++  const effectState = state(createShadeBobParameters(rng));
++  const visible = (): Uint8Array => frame.subarray(0, width * height);
++
++  assert.equal(fnv1a64(visible()), "be58dfc32a472d25");
++  assert.deepEqual(rng.checkpoint(), { state: 1467105343, calls: 110 });
++
++  shadeBobs8(frame, effectState, 1, rng);
++  assert.equal(fnv1a64(visible()), "ea0f086a15a5cd3e");
++  assert.deepEqual(rng.checkpoint(), { state: 1020636519, calls: 118 });
++
++  twoChasers8(frame, effectState, 2);
++  assert.equal(fnv1a64(visible()), "b2f8350ae05aee6a");
++
++  solidLine8(frame, effectState);
++  assert.equal(fnv1a64(visible()), "4e8c2f0e4538207a");
++
++  dotChaser8(frame, effectState);
++  assert.equal(fnv1a64(visible()), "9172abc3812c24a9");
++  assert.equal(effectState.dotChaser.pointer, 1);
++
++  grid8(frame, effectState);
++  assert.equal(fnv1a64(visible()), "421021c1dc80675a");
++
++  diminishCenter8(frame, effectState);
++  assert.equal(fnv1a64(visible()), "1a956297b3b7fc4c");
++});
+diff --git a/packages/bergium/tests/oracle/geiss-exact-map-builder.test.ts b/packages/bergium/tests/oracle/geiss-exact-map-builder.test.ts
+new file mode 100644
+index 0000000..8b9da69
+--- /dev/null
++++ b/packages/bergium/tests/oracle/geiss-exact-map-builder.test.ts
+@@ -0,0 +1,71 @@
++import { test } from "vitest";
++import assert from "node:assert/strict";
++import { ExactMapBuilder } from "../../src/pipelines/geiss/reference/ExactMapBuilder.js";
++import type { MapParameters } from "../../src/pipelines/geiss/reference/MapField.js";
++import { MsvcRandom } from "../../src/pipelines/geiss/reference/MsvcRandom.js";
++
++const parameters = (mode: number): MapParameters => ({
++  mode,
++  width: 64,
++  height: 48,
++  centerX: 31,
++  centerY: 23,
++  scale1: 1,
++  scale2: 1,
++  turn1: 0,
++  turn2: 0,
++  f1: 0,
++  f2: 0,
++  f3: 0,
++  damping: 1,
++  weightSum: 256,
++  fpsAtModeSwitch: 30,
++  nuclideSelected: false,
++  influences: [],
++  randomNoise: new Float32Array(2345),
++  randomNoisePosition: { value: 0 },
++});
++
++test("pending map advances by the source frame budget", () => {
++  const rng = new MsvcRandom(1);
++  const builder = new ExactMapBuilder(parameters(2), 4, 550, rng);
++
++  assert.deepEqual(builder.progress(), {
++    generatedPixels: 0,
++    totalActivePixels: 64 * 40,
++    frameCount: 0,
++    complete: false,
++  });
++  assert.deepEqual(builder.step(), {
++    generatedPixels: 4,
++    totalActivePixels: 64 * 40,
++    frameCount: 1,
++    complete: false,
++  });
++  assert.equal(rng.callCount, 0, "mode 2 consumes no per-pixel random values");
++});
++
++test("mode 14 consumes one global random value for every generated pixel", () => {
++  const rng = new MsvcRandom(1);
++  const builder = new ExactMapBuilder(parameters(14), 4, 550, rng);
++
++  const first = builder.step();
++  assert.equal(first.generatedPixels, 4);
++  assert.equal(rng.callCount, 4);
++
++  const second = builder.step();
++  assert.equal(second.generatedPixels, 9);
++  assert.equal(rng.callCount, 9);
++});
++
++test("rush completes the pending map without changing raster RNG order", () => {
++  const a = new MsvcRandom(7);
++  const b = new MsvcRandom(7);
++  const normal = new ExactMapBuilder(parameters(14), 4, 3, a);
++  const rushed = new ExactMapBuilder(parameters(14), 4, 3, b);
++
++  while (!normal.step().complete) { /* source-timed */ }
++  assert.equal(rushed.step(true).complete, true);
++  assert.deepEqual(rushed.currentMap(), normal.currentMap());
++  assert.deepEqual(a.checkpoint(), b.checkpoint());
++});
+diff --git a/packages/bergium/tests/oracle/geiss-initialization8.test.ts b/packages/bergium/tests/oracle/geiss-initialization8.test.ts
+new file mode 100644
+index 0000000..4c2565a
+--- /dev/null
++++ b/packages/bergium/tests/oracle/geiss-initialization8.test.ts
+@@ -0,0 +1,43 @@
++import { test } from "vitest";
++import assert from "node:assert/strict";
++import { initializeGeiss8 } from "../../src/pipelines/geiss/reference/GeissInitialization8.js";
++
++test("8-bit initialization preserves the FX_Init RNG timeline", () => {
++  const result = initializeGeiss8({
++    seed: 1,
++    width: 640,
++    height: 480,
++    centerX: 320,
++    centerY: 240,
++  });
++
++  assert.equal(result.effectState.chaserOffset, 41);
++  assert.deepEqual(result.rng.checkpoint(), { state: 2994708609, calls: 2688 });
++  assert.deepEqual(Array.from(result.scatter.slice(0, 5)), [
++    0.038325000554323196,
++    0.04165000095963478,
++    0.03750000149011612,
++    0.045775000005960464,
++    0.03189999982714653,
++  ]);
++  assert.deepEqual(Array.from(result.effectState.shade.c1.slice(0, 3)), [
++    0.13561999797821045,
++    0.12841999530792236,
++    0.12599000334739685,
++  ]);
++  assert.deepEqual(Array.from(result.paletteFrequencies), [
++    0.02670999988913536,
++    0.027860000729560852,
++    0.022630000486969948,
++    0.02312999963760376,
++    0.02355000004172325,
++    0.021849999204277992,
++  ]);
++  assert.deepEqual(Array.from(result.mode7RandomArray.slice(0, 5)), [
++    0.026499999687075615,
++    0.006000000052154064,
++    0.004000000189989805,
++    0.01600000075995922,
++    0.02250000089406967,
++  ]);
++});
+diff --git a/packages/bergium/tests/oracle/geiss-numeric-map-exact.test.ts b/packages/bergium/tests/oracle/geiss-numeric-map-exact.test.ts
+new file mode 100644
+index 0000000..a34b9e2
+--- /dev/null
++++ b/packages/bergium/tests/oracle/geiss-numeric-map-exact.test.ts
+@@ -0,0 +1,76 @@
++import { test } from "vitest";
++import assert from "node:assert/strict";
++import { cTrunc, i16, i8, u8 } from "../../src/pipelines/geiss/reference/GeissNumeric.js";
++import {
++  quantizeMapTexel,
++  quantizeMapTexelExact,
++  type MapParameters,
++} from "../../src/pipelines/geiss/reference/MapField.js";
++import { MsvcRandom } from "../../src/pipelines/geiss/reference/MsvcRandom.js";
++
++const params = (overrides: Partial<MapParameters> = {}): MapParameters => ({
++  mode: 2,
++  width: 640,
++  height: 480,
++  centerX: 320,
++  centerY: 240,
++  scale1: 2.001,
++  scale2: 1,
++  turn1: 0,
++  turn2: 0,
++  f1: 0,
++  f2: 0,
++  f3: 0,
++  damping: 1,
++  weightSum: 256,
++  fpsAtModeSwitch: 30,
++  nuclideSelected: false,
++  influences: [],
++  randomNoise: new Float32Array(2345),
++  randomNoisePosition: { value: 0 },
++  ...overrides,
++});
++
++test("C numeric helpers preserve truncation and signed/unsigned wrapping", () => {
++  assert.equal(cTrunc(-1.9), -1);
++  assert.equal(cTrunc(1.9), 1);
++  assert.equal(u8(-1), 255);
++  assert.equal(u8(257.9), 1);
++  assert.equal(i8(255), -1);
++  assert.equal(i16(0xffff), -1);
++  assert.equal(i16(0x8000), -32768);
++});
++
++test("MsvcRandom checkpoint restores both sequence state and call count", () => {
++  const rng = new MsvcRandom(1);
++  assert.deepEqual([rng.nextRaw(), rng.nextRaw(), rng.nextRaw()], [41, 18467, 6334]);
++  const checkpoint = rng.checkpoint();
++  const suffix = [rng.nextRaw(), rng.nextRaw(), rng.nextRaw()];
++  assert.equal(rng.callCount, 6);
++  rng.restore(checkpoint);
++  assert.equal(rng.callCount, 3);
++  assert.deepEqual([rng.nextRaw(), rng.nextRaw(), rng.nextRaw()], suffix);
++});
++
++test("source-exact map quantization retains negative fractions and byte wrapping", () => {
++  const safe = quantizeMapTexel(0, 2, params(), new MsvcRandom(1));
++  const exact = quantizeMapTexelExact(0, 2, params(), new MsvcRandom(1));
++
++  assert.deepEqual(safe, {
++    sourceX: 0,
++    sourceY: 2,
++    w00: 19,
++    w10: 40,
++    w01: 61,
++    w11: 131,
++  });
++  assert.deepEqual(exact, {
++    sourceX: 0,
++    sourceY: 2,
++    w00: 100,
++    w10: 212,
++    w01: 237,
++    w11: 216,
++  });
++  assert.notDeepEqual(exact, safe);
++});

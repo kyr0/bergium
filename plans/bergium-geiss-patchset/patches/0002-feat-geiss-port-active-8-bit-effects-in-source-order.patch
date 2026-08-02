@@ -1,0 +1,595 @@
+From 2a89b352f255ffe525282cbd840d0e16a39b58e5 Mon Sep 17 00:00:00 2001
+From: OpenAI <patches@openai.invalid>
+Date: Wed, 29 Jul 2026 21:20:26 +0000
+Subject: [PATCH 02/10] feat(geiss): port active 8-bit effects in source order
+
+---
+ .../geiss/reference/ExactEffects8.ts          | 579 ++++++++++++++++++
+ 1 file changed, 579 insertions(+)
+ create mode 100644 packages/bergium/src/pipelines/geiss/reference/ExactEffects8.ts
+
+diff --git a/packages/bergium/src/pipelines/geiss/reference/ExactEffects8.ts b/packages/bergium/src/pipelines/geiss/reference/ExactEffects8.ts
+new file mode 100644
+index 0000000..10053d4
+--- /dev/null
++++ b/packages/bergium/src/pipelines/geiss/reference/ExactEffects8.ts
+@@ -0,0 +1,579 @@
++/**
++ * Source-shaped 8-bit Geiss effects.
++ *
++ * Derived from Geiss 4.30 `Effects.h` (BSD-3-Clause, Ryan M. Geiss). These
++ * functions mutate the scalar feedback buffer directly and in source order.
++ * They intentionally do not use a generic contribution/max-blend abstraction:
++ * the original effects mix conditional increments, wrapping byte writes,
++ * saturating additions, direct assignments and nonlinear brightening.
++ */
++
++import type { RandomSource } from "./MapField.js";
++import {
++  addU8Saturating,
++  addU8Wrapping,
++  cTrunc,
++  cosf,
++  f32,
++  maxU8,
++  sinf,
++  sqrtf,
++  u8,
++} from "./GeissNumeric.js";
++
++export interface ShadeBobParameters {
++  readonly c1: Float32Array;
++  readonly c2: Float32Array;
++  readonly c3: Float32Array;
++  readonly f1: Float32Array;
++  readonly f2: Float32Array;
++  readonly f3: Float32Array;
++  readonly f4: Float32Array;
++  readonly radius0: Float32Array;
++  readonly radius1: Float32Array;
++  readonly radius2: Float32Array;
++  readonly radius3: Float32Array;
++}
++
++export interface DotChaserState8 {
++  pointer: number;
++  readonly x: Int32Array;
++  readonly y: Int32Array;
++  readonly r: Uint8Array;
++  readonly g: Uint8Array;
++  readonly b: Uint8Array;
++}
++
++export interface ExactEffects8State {
++  width: number;
++  height: number;
++  centerX: number;
++  centerY: number;
++  /** `FX_YCUT`, used by source bounds. */
++  cut: number;
++  /** `FX_YCUT_HIDE`, used by Grid. */
++  hideCut: number;
++  fpsAtModeSwitch: number;
++  floatFrame: number;
++  intFrame: number;
++  chaserOffset: number;
++  mode: number;
++  centerDwindle: number;
++  solarMax: number;
++  gridDirection: -1 | 1;
++  soundActive: boolean;
++  soundEmpty: boolean;
++  readonly shade: ShadeBobParameters;
++  readonly dotChaser: DotChaserState8;
++}
++
++export interface ExactEffectSelection8 {
++  /** Source stores a count; normal selected value is one. */
++  shade: number;
++  /** 0=off, 1=first path, 2=both paths. */
++  chasers: 0 | 1 | 2;
++  bar: boolean;
++  dots: boolean;
++  nuclide: boolean;
++  grid: boolean;
++  solar: boolean;
++}
++
++const N_SHADE_BOBS = 10;
++const N_DOT_HISTORY = 20;
++
++/**
++ * Consume exactly the source's 110 random values used for the ten `micro_*`
++ * ShadeBob records. Call this at the matching point in global initialization.
++ */
++export function createShadeBobParameters(rng: RandomSource): ShadeBobParameters {
++  const c1 = new Float32Array(N_SHADE_BOBS);
++  const c2 = new Float32Array(N_SHADE_BOBS);
++  const c3 = new Float32Array(N_SHADE_BOBS);
++  const f1 = new Float32Array(N_SHADE_BOBS);
++  const f2 = new Float32Array(N_SHADE_BOBS);
++  const f3 = new Float32Array(N_SHADE_BOBS);
++  const f4 = new Float32Array(N_SHADE_BOBS);
++  const radius0 = new Float32Array(N_SHADE_BOBS);
++  const radius1 = new Float32Array(N_SHADE_BOBS);
++  const radius2 = new Float32Array(N_SHADE_BOBS);
++  const radius3 = new Float32Array(N_SHADE_BOBS);
++
++  for (let i = 0; i < N_SHADE_BOBS; i++) {
++    c1[i] = f32(0.08 + 0.09 * rng.nextInt(1000) * 0.001);
++    c2[i] = f32(0.08 + 0.09 * rng.nextInt(1000) * 0.001);
++    c3[i] = f32(0.08 + 0.09 * rng.nextInt(1000) * 0.001);
++    f1[i] = f32(0.1 + 0.05 * rng.nextInt(1000) * 0.001);
++    f2[i] = f32(0.1 + 0.05 * rng.nextInt(1000) * 0.001);
++    f3[i] = f32(0.1 + 0.05 * rng.nextInt(1000) * 0.001);
++    f4[i] = f32(0.1 + 0.05 * rng.nextInt(1000) * 0.001);
++    radius0[i] = f32(2 + 2.8 * rng.nextInt(1000) * 0.001);
++    radius1[i] = f32(2 + 2.8 * rng.nextInt(1000) * 0.001);
++    radius2[i] = f32(2 + 2.8 * rng.nextInt(1000) * 0.001);
++    radius3[i] = f32(2 + 2.8 * rng.nextInt(1000) * 0.001);
++  }
++
++  return { c1, c2, c3, f1, f2, f3, f4, radius0, radius1, radius2, radius3 };
++}
++
++export function createDotChaserState8(): DotChaserState8 {
++  const x = new Int32Array(N_DOT_HISTORY);
++  const y = new Int32Array(N_DOT_HISTORY);
++  x.fill(1);
++  y.fill(1);
++  return {
++    pointer: 0,
++    x,
++    y,
++    r: new Uint8Array(N_DOT_HISTORY),
++    g: new Uint8Array(N_DOT_HISTORY),
++    b: new Uint8Array(N_DOT_HISTORY),
++  };
++}
++
++function assertFrame(frame: Uint8Array, state: ExactEffects8State): void {
++  const expected = state.width * state.height;
++  if (frame.length < expected) {
++    throw new RangeError(`8-bit feedback buffer has ${frame.length} bytes, expected at least ${expected}`);
++  }
++  if (state.width < 30 || state.height < 16) {
++    throw new RangeError(`Unsupported Geiss effect surface ${state.width}x${state.height}`);
++  }
++}
++
++function addBelow250(frame: Uint8Array, index: number, amount: number): void {
++  if (frame[index]! < 250) addU8Wrapping(frame, index, amount);
++}
++
++/** `Effects.h::ShadeBobs`, 8-bit branch. */
++export function shadeBobs8(
++  frame: Uint8Array,
++  state: ExactEffects8State,
++  selectedCount: number,
++  rng: RandomSource,
++): void {
++  assertFrame(frame, state);
++  const count = Math.min(N_SHADE_BOBS, Math.max(0, cTrunc(selectedCount)));
++  const p = state.shade;
++  const ff = f32(state.floatFrame);
++
++  for (let i = 0; i < count; i++) {
++    // The RGB oscillators are evaluated by the source even in 8-bit mode.
++    cTrunc(1 + sinf(f32(ff * p.c1[i]!)));
++    cTrunc(1 + sinf(f32(ff * p.c2[i]!)));
++    cTrunc(1 + sinf(f32(ff * p.c3[i]!)));
++
++    let a = state.centerX + cTrunc(f32(
++      f32(p.radius0[i]! * cosf(f32(ff * p.f1[i]!)))
++      + f32(p.radius2[i]! * cosf(f32(ff * p.f2[i]!))),
++    ));
++    let b = state.centerY + cTrunc(f32(
++      f32(p.radius1[i]! * cosf(f32(ff * p.f3[i]!)))
++      + f32(p.radius3[i]! * cosf(f32(ff * p.f4[i]!))),
++    ));
++
++    for (let k = 0; k < 4; k++) {
++      b += rng.nextInt(5) - 2;
++      a += rng.nextInt(5) - 2;
++      if (b > state.cut && b < state.height - 1 - state.cut) {
++        const o = b * state.width + a;
++        addBelow250(frame, o, 2);
++        addBelow250(frame, o + 1, 1);
++        addBelow250(frame, o - 1, 1);
++        addBelow250(frame, o + state.width, 1);
++        addBelow250(frame, o - state.width, 1);
++      }
++    }
++  }
++}
++
++/** `Effects.h::Two_Chasers`, 8-bit branch. */
++export function twoChasers8(
++  frame: Uint8Array,
++  state: ExactEffects8State,
++  variant: 0 | 1 | 2,
++): void {
++  assertFrame(frame, state);
++  if (variant === 0) return;
++
++  const s = f32(state.width / 640);
++  let timeScale = f32(1);
++  if (state.fpsAtModeSwitch >= 10 && state.fpsAtModeSwitch < 120) {
++    timeScale = f32(30 / state.fpsAtModeSwitch);
++  }
++  let t = f32(f32(state.floatFrame + state.chaserOffset) * timeScale);
++  const passes = variant === 2 ? 2 : 1;
++  const samples = cTrunc(f32(20 * s));
++  if (samples <= 0) return;
++  const advance = f32(f32(f32(0.08 * timeScale) * 20) / samples);
++
++  for (let k = 0; k < samples; k++) {
++    t = f32(t + advance);
++    for (let pass = 0; pass < passes; pass++) {
++      let a: number;
++      let b: number;
++      if (pass === 0) {
++        a = state.centerX + cTrunc(f32(
++          f32(f32(s * 74) * cosf(f32(t * 0.1102 + 10)))
++          + f32(f32(s * 65) * cosf(f32(t * 0.1312 + 20))),
++        ));
++        b = state.centerY + cTrunc(f32(
++          f32(f32(s * 54) * cosf(f32(t * 0.1204 + 40)))
++          + f32(f32(s * 55) * cosf(f32(t * 0.1715 + 30))),
++        ));
++      } else {
++        a = state.centerX + cTrunc(f32(
++          f32(f32(s * 64) * cosf(f32(t * 0.1213 + 33)))
++          + f32(f32(s * 55) * cosf(f32(t * 0.1408 + 15))),
++        ));
++        b = state.centerY + cTrunc(f32(
++          f32(f32(s * 52) * cosf(f32(t * 0.1304 + 12)))
++          + f32(f32(s * 51) * cosf(f32(t * 0.1103 + 21))),
++        ));
++      }
++
++      if (b > state.cut && b < state.height - 1 - state.cut) {
++        const o = b * state.width + a;
++        frame[o] = u8(f32(255 - f32(f32(255 - frame[o]!) * 0.6)));
++      }
++    }
++  }
++}
++
++/** `Effects.h::Solid_Line`, 8-bit branch. */
++export function solidLine8(frame: Uint8Array, state: ExactEffects8State): void {
++  assertFrame(frame, state);
++  const speedMultiplier = f32(0.6);
++  let phase = f32(state.floatFrame + f32(state.chaserOffset * speedMultiplier));
++  phase = f32(f32(phase * 0.55) / f32(0.08 * 20));
++
++  if (state.width === 320) {
++    const x1 = f32(state.centerX + f32(
++      f32(12 * cosf(f32(phase * 0.1102 + 10)))
++      + f32(15 * cosf(f32(phase * 0.1312 + 20))),
++    ));
++    const y1 = f32(state.centerY + f32(
++      f32(11 * cosf(f32(phase * 0.1204 + 40)))
++      + f32(10 * cosf(f32(phase * 0.1715 + 30))),
++    ));
++    const x2 = f32(state.centerX + f32(
++      f32(10 * cosf(f32(phase * 0.1213 + 33)))
++      + f32(13 * cosf(f32(phase * 0.1408 + 15))),
++    ));
++    const y2 = f32(state.centerY + f32(
++      f32(9 * cosf(f32(phase * 0.1304 + 12)))
++      + f32(11 * cosf(f32(phase * 0.1103 + 21))),
++    ));
++
++    for (let k = 0; k < 43; k++) {
++      const ratio = f32(k / 43);
++      const inverse = f32(1 - ratio);
++      const a = cTrunc(f32(f32(x1 * ratio) + f32(x2 * inverse)));
++      const b = cTrunc(f32(f32(y1 * ratio) + f32(y2 * inverse)));
++      if (b > state.cut && b < state.height - 1 - state.cut) {
++        const o = b * 320 + a;
++        if (frame[o]! < 223) addU8Wrapping(frame, o, 16);
++      }
++    }
++    return;
++  }
++
++  const s = f32(state.width / 640);
++  const x1 = f32(state.centerX + f32(
++    f32(f32(s * 16) * cosf(f32(phase * 0.1102 + 10)))
++    + f32(f32(s * 15) * cosf(f32(phase * 0.1312 + 20))),
++  ));
++  const y1 = f32(state.centerY + f32(
++    f32(f32(s * 15) * cosf(f32(phase * 0.1204 + 40)))
++    + f32(f32(s * 10) * cosf(f32(phase * 0.1715 + 30))),
++  ));
++  const x2 = f32(state.centerX + f32(
++    f32(f32(s * 14) * cosf(f32(phase * 0.1213 + 33)))
++    + f32(f32(s * 13) * cosf(f32(phase * 0.1408 + 15))),
++  ));
++  const y2 = f32(state.centerY + f32(
++    f32(f32(s * 13) * cosf(f32(phase * 0.1304 + 12)))
++    + f32(f32(s * 11) * cosf(f32(phase * 0.1103 + 21))),
++  ));
++  const samples = cTrunc(f32(s * 50));
++  if (samples <= 0) return;
++  const inverseSamples = f32(1 / samples);
++
++  for (let k = 0; k < samples; k++) {
++    const ratio = f32(k * inverseSamples);
++    const inverse = f32(1 - ratio);
++    const a = cTrunc(f32(f32(x1 * ratio) + f32(x2 * inverse)));
++    const b = cTrunc(f32(f32(y1 * ratio) + f32(y2 * inverse)));
++    if (b > state.cut && b < state.height - 1 - state.cut) {
++      const o = b * state.width + a;
++      if (frame[o]! < 223) addU8Wrapping(frame, o, 16);
++    }
++  }
++}
++
++/** `Effects.h::One_Dotty_Chaser`, 8-bit branch. */
++export function dotChaser8(frame: Uint8Array, state: ExactEffects8State): void {
++  assertFrame(frame, state);
++  const s = f32(state.width / 640);
++  let t = f32(state.floatFrame);
++  if (state.fpsAtModeSwitch >= 10 && state.fpsAtModeSwitch < 120) {
++    t = f32(t * f32(30 / state.fpsAtModeSwitch));
++  }
++
++  const a = state.centerX + cTrunc(f32(
++    f32(f32(s * 64) * cosf(f32(t * 0.0613 + 33)))
++    + f32(f32(s * 55) * cosf(f32(t * 0.0708 + 15))),
++  ));
++  const b = state.centerY + cTrunc(f32(
++    f32(f32(s * 52) * cosf(f32(t * 0.0704 + 12)))
++    + f32(f32(s * 51) * cosf(f32(t * 0.0503 + 21))),
++  ));
++
++  if (b <= state.cut || b >= state.height - 1 - state.cut) return;
++
++  const chaser = state.dotChaser;
++  chaser.pointer = (chaser.pointer + 1) % N_DOT_HISTORY;
++  const p = chaser.pointer;
++  chaser.x[p] = a;
++  chaser.y[p] = b;
++  chaser.r[p] = u8(f32(127 + f32(126 * sinf(f32(t * 0.0613 + 33)))));
++  chaser.g[p] = u8(f32(127 + f32(126 * sinf(f32(t * 0.0713 + 30)))));
++  chaser.b[p] = u8(f32(127 + f32(126 * sinf(f32(t * 0.0513 + 27)))));
++
++  for (let k = 0; k < N_DOT_HISTORY; k++) {
++    const o = chaser.y[k]! * state.width + chaser.x[k]!;
++    frame[o] = chaser.r[k]!;
++    if (state.width >= 1050) {
++      frame[o + 1] = chaser.r[k]!;
++      frame[o + state.width] = chaser.r[k]!;
++      frame[o + state.width + 1] = chaser.r[k]!;
++    }
++    chaser.x[k] = chaser.x[k]! + 1;
++  }
++}
++
++/** `Effects.h::Nuclide`, the pre-warp silent/empty-sound 8-bit branch. */
++export function nuclidePreWarp8(
++  frame: Uint8Array,
++  state: ExactEffects8State,
++  rng: RandomSource,
++): void {
++  assertFrame(frame, state);
++  if (state.soundActive && !state.soundEmpty) return;
++  if (rng.nextInt(12) !== 0) return;
++
++  const nodes = 3 + rng.nextInt(5);
++  const phase = rng.nextInt(1000);
++  rng.nextInt(30); // source initializes `rad = 20 + rand()%30`, then overwrites it
++  let radius: number;
++  let blobRadius: number;
++  if (state.width === 320) {
++    blobRadius = 2 + rng.nextInt(6);
++    radius = 22 + rng.nextInt(6);
++  } else {
++    blobRadius = 3 + rng.nextInt(8);
++    radius = 34 + rng.nextInt(8);
++  }
++
++  for (let n = 0; n < nodes; n++) {
++    const angle = f32(f32(n / nodes * 6.28) + phase);
++    const cx = state.centerX + cTrunc(f32(radius * cosf(angle)));
++    const cy = state.centerY + cTrunc(f32(radius * sinf(angle)));
++    if (cy - 10 <= state.cut || cy + 10 >= state.height - 1 - state.cut) continue;
++
++    const center = cy * state.width + cx;
++    for (let x = -10; x < 10; x++) {
++      for (let y = -10; y < 10; y++) {
++        const value = cTrunc(f32(f32(blobRadius - sqrtf(x * x + y * y)) * 25));
++        if (value > 0) addU8Saturating(frame, center + y * state.width + x, value);
++      }
++    }
++  }
++}
++
++function solarParticleCount8(state: ExactEffects8State): number {
++  let fx: number;
++  if (state.width === 320) {
++    fx = cTrunc(f32(3 + f32(state.solarMax * f32(
++      2.4
++      + f32(0.35 * sinf(f32(state.intFrame * 0.05)))
++      + f32(0.4 * sinf(f32(state.intFrame * 0.038 + 1))),
++    ))));
++    return cTrunc(f32(fx * 0.01));
++  }
++
++  fx = cTrunc(f32(
++    3
++    + f32(state.solarMax * 1.6)
++    + f32(state.solarMax * 0.43 * sinf(f32(state.intFrame * 0.05)))
++    + f32(state.solarMax * 0.43 * sinf(f32(state.intFrame * 0.038 + 1))),
++  ));
++  return cTrunc(f32(fx * 0.05));
++}
++
++/** `Drop_Solar_Particles_320`, 8-bit branch. */
++export function solarParticles320_8(
++  frame: Uint8Array,
++  state: ExactEffects8State,
++  count: number,
++  rng: RandomSource,
++): void {
++  let particles = cTrunc(count) * 4;
++  while (particles-- > 0) {
++    let x = 0;
++    let y = 0;
++    let distance = f32(100);
++    while (distance >= 17) {
++      y = rng.nextInt(48) - 24;
++      x = rng.nextInt(64) - 32;
++      distance = sqrtf(x * x + y * y);
++    }
++    y += state.centerY;
++    x += state.centerX;
++    if (y <= state.cut || y >= state.height - 1 - state.cut) continue;
++
++    const o = y * 320 + x;
++    rng.nextInt(256); // p1: consumed before the source overwrites i0
++    rng.nextInt(256); // p2: consumed for the inactive true-color branch
++    rng.nextInt(256); // p3: consumed for the inactive true-color branch
++    const i0 = 2 + rng.nextInt(3);
++    const i1 = cTrunc(i0 / 2);
++    const i2 = cTrunc(i1 / 2);
++    if (frame[o]! < 207 - i0) {
++      addU8Wrapping(frame, o, i0);
++      addU8Wrapping(frame, o + 1, i1);
++      addU8Wrapping(frame, o - 1, i1);
++      addU8Wrapping(frame, o + 320, i1);
++      addU8Wrapping(frame, o - 320, i1);
++      addU8Wrapping(frame, o - 321, i2);
++      addU8Wrapping(frame, o - 319, i2);
++      addU8Wrapping(frame, o + 319, i2);
++      addU8Wrapping(frame, o + 321, i2);
++    }
++  }
++}
++
++/** `Drop_Solar_Particles`, 8-bit branch. */
++export function solarParticles8(
++  frame: Uint8Array,
++  state: ExactEffects8State,
++  count: number,
++  rng: RandomSource,
++): void {
++  let particles = cTrunc(count) * 4;
++  while (particles-- > 0) {
++    let x = 0;
++    let y = 0;
++    let distance = f32(100);
++    while (distance >= 35) {
++      y = rng.nextInt(72) - 36;
++      x = rng.nextInt(96) - 48;
++      distance = sqrtf(x * x + y * y);
++    }
++    y += state.centerY;
++    x += state.centerX;
++    if (y <= state.cut || y >= state.height - 1 - state.cut) continue;
++
++    const o = y * state.width + x;
++    const i0 = cTrunc(f32(2 + rng.nextInt(2) + f32(f32(35 - distance) / 9)));
++    const i1 = i0 - 1;
++    const i2 = i1 - 1;
++    if (frame[o]! < 207 - i0) {
++      addU8Wrapping(frame, o, i0);
++      addU8Wrapping(frame, o + 1, i1);
++      addU8Wrapping(frame, o - 1, i1);
++      addU8Wrapping(frame, o + state.width, i1);
++      addU8Wrapping(frame, o - state.width, i1);
++      addU8Wrapping(frame, o - state.width - 1, i2);
++      addU8Wrapping(frame, o - state.width + 1, i2);
++      addU8Wrapping(frame, o + state.width - 1, i2);
++      addU8Wrapping(frame, o + state.width + 1, i2);
++    }
++  }
++}
++
++export function selectedSolarParticles8(
++  frame: Uint8Array,
++  state: ExactEffects8State,
++  rng: RandomSource,
++): void {
++  const count = solarParticleCount8(state);
++  if (state.width === 320) solarParticles320_8(frame, state, count, rng);
++  else solarParticles8(frame, state, count, rng);
++}
++
++/** `Effects.h::Grid`, 8-bit branch. */
++export function grid8(frame: Uint8Array, state: ExactEffects8State): void {
++  assertFrame(frame, state);
++  const xIncrement = cTrunc(state.width / 30);
++  const yIncrement = xIncrement;
++  if (xIncrement <= 0) return;
++  const fpsScale = f32(30 / state.fpsAtModeSwitch);
++  const brightness = u8(Math.max(0, f32(
++    65
++    + f32(45 * sinf(f32(state.intFrame * 0.06033 * fpsScale)))
++    + f32(35 * cosf(f32(state.intFrame * 0.04710 * fpsScale + 1)))
++    + f32(25 * cosf(f32(state.intFrame * 0.00523 * fpsScale - 1))),
++  )));
++
++  let direction = state.intFrame % xIncrement;
++  if (state.gridDirection === 1) direction *= -1;
++
++  for (let y = state.hideCut; y < state.height - state.hideCut; y += yIncrement) {
++    const row = y * state.width;
++    if (state.width >= 1700) {
++      for (let x = 0; x < state.width - 1; x += xIncrement) {
++        const o = row + x + direction;
++        maxU8(frame, o, brightness);
++        maxU8(frame, o + 1, brightness);
++        maxU8(frame, o + state.width, brightness);
++        maxU8(frame, o + state.width + 1, brightness);
++      }
++    } else {
++      for (let x = 0; x < state.width; x += xIncrement) {
++        maxU8(frame, row + x + direction, brightness);
++      }
++    }
++  }
++}
++
++/** `Effects.h::Diminish_Center`, 8-bit branch. */
++export function diminishCenter8(frame: Uint8Array, state: ExactEffects8State): void {
++  assertFrame(frame, state);
++  if (state.centerDwindle >= 0.999) return;
++  const d = f32(state.centerDwindle);
++
++  if (state.mode !== 12) {
++    const center = state.centerY * state.width + state.centerX;
++    const offsets = [center, center - 1, center + 1, center + state.width, center - state.width] as const;
++    for (const o of offsets) {
++      if (frame[o]! > 1) frame[o] = u8(f32(frame[o]! * d));
++    }
++    return;
++  }
++
++  let o = state.cut * state.width + state.centerX;
++  for (let y = state.cut; y < state.height - state.cut; y++) {
++    frame[o - 1] = u8(f32(frame[o - 1]! * d));
++    frame[o] = u8(f32(frame[o]! * d));
++    frame[o + 1] = u8(f32(frame[o + 1]! * d));
++    o += state.width;
++  }
++}
++
++/** Execute the complete active 8-bit pre-warp effect chain in source order. */
++export function renderExactEffects8(
++  frame: Uint8Array,
++  state: ExactEffects8State,
++  selection: ExactEffectSelection8,
++  rng: RandomSource,
++): void {
++  if (selection.shade > 0) shadeBobs8(frame, state, selection.shade, rng);
++  if (selection.chasers > 0) twoChasers8(frame, state, selection.chasers);
++  if (selection.bar) solidLine8(frame, state);
++  if (selection.dots) dotChaser8(frame, state);
++  if (selection.nuclide) nuclidePreWarp8(frame, state, rng);
++  if (selection.grid) grid8(frame, state);
++  if (selection.solar) selectedSolarParticles8(frame, state, rng);
++  diminishCenter8(frame, state);
++}

@@ -1,0 +1,88 @@
+From 442513e0490d5dc0c198ded44bdfeb0d2369967b Mon Sep 17 00:00:00 2001
+From: OpenAI <patches@openai.invalid>
+Date: Wed, 29 Jul 2026 21:26:19 +0000
+Subject: [PATCH 07/10] test(geiss): pin pending map budget and rng
+ interleaving
+
+---
+ .../oracle/geiss-exact-map-builder.test.ts    | 71 +++++++++++++++++++
+ 1 file changed, 71 insertions(+)
+ create mode 100644 packages/bergium/tests/oracle/geiss-exact-map-builder.test.ts
+
+diff --git a/packages/bergium/tests/oracle/geiss-exact-map-builder.test.ts b/packages/bergium/tests/oracle/geiss-exact-map-builder.test.ts
+new file mode 100644
+index 0000000..8b9da69
+--- /dev/null
++++ b/packages/bergium/tests/oracle/geiss-exact-map-builder.test.ts
+@@ -0,0 +1,71 @@
++import { test } from "vitest";
++import assert from "node:assert/strict";
++import { ExactMapBuilder } from "../../src/pipelines/geiss/reference/ExactMapBuilder.js";
++import type { MapParameters } from "../../src/pipelines/geiss/reference/MapField.js";
++import { MsvcRandom } from "../../src/pipelines/geiss/reference/MsvcRandom.js";
++
++const parameters = (mode: number): MapParameters => ({
++  mode,
++  width: 64,
++  height: 48,
++  centerX: 31,
++  centerY: 23,
++  scale1: 1,
++  scale2: 1,
++  turn1: 0,
++  turn2: 0,
++  f1: 0,
++  f2: 0,
++  f3: 0,
++  damping: 1,
++  weightSum: 256,
++  fpsAtModeSwitch: 30,
++  nuclideSelected: false,
++  influences: [],
++  randomNoise: new Float32Array(2345),
++  randomNoisePosition: { value: 0 },
++});
++
++test("pending map advances by the source frame budget", () => {
++  const rng = new MsvcRandom(1);
++  const builder = new ExactMapBuilder(parameters(2), 4, 550, rng);
++
++  assert.deepEqual(builder.progress(), {
++    generatedPixels: 0,
++    totalActivePixels: 64 * 40,
++    frameCount: 0,
++    complete: false,
++  });
++  assert.deepEqual(builder.step(), {
++    generatedPixels: 4,
++    totalActivePixels: 64 * 40,
++    frameCount: 1,
++    complete: false,
++  });
++  assert.equal(rng.callCount, 0, "mode 2 consumes no per-pixel random values");
++});
++
++test("mode 14 consumes one global random value for every generated pixel", () => {
++  const rng = new MsvcRandom(1);
++  const builder = new ExactMapBuilder(parameters(14), 4, 550, rng);
++
++  const first = builder.step();
++  assert.equal(first.generatedPixels, 4);
++  assert.equal(rng.callCount, 4);
++
++  const second = builder.step();
++  assert.equal(second.generatedPixels, 9);
++  assert.equal(rng.callCount, 9);
++});
++
++test("rush completes the pending map without changing raster RNG order", () => {
++  const a = new MsvcRandom(7);
++  const b = new MsvcRandom(7);
++  const normal = new ExactMapBuilder(parameters(14), 4, 3, a);
++  const rushed = new ExactMapBuilder(parameters(14), 4, 3, b);
++
++  while (!normal.step().complete) { /* source-timed */ }
++  assert.equal(rushed.step(true).complete, true);
++  assert.deepEqual(rushed.currentMap(), normal.currentMap());
++  assert.deepEqual(a.checkpoint(), b.checkpoint());
++});

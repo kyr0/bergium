@@ -1,0 +1,101 @@
+From 95404a16c02c6e7eab2484d40d99cb6c0f39c416 Mon Sep 17 00:00:00 2001
+From: OpenAI <patches@openai.invalid>
+Date: Wed, 29 Jul 2026 21:27:02 +0000
+Subject: [PATCH 08/10] feat(geiss): reproduce 8-bit initialization rng order
+
+---
+ .../geiss/reference/GeissInitialization8.ts   | 85 +++++++++++++++++++
+ 1 file changed, 85 insertions(+)
+ create mode 100644 packages/bergium/src/pipelines/geiss/reference/GeissInitialization8.ts
+
+diff --git a/packages/bergium/src/pipelines/geiss/reference/GeissInitialization8.ts b/packages/bergium/src/pipelines/geiss/reference/GeissInitialization8.ts
+new file mode 100644
+index 0000000..98495f0
+--- /dev/null
++++ b/packages/bergium/src/pipelines/geiss/reference/GeissInitialization8.ts
+@@ -0,0 +1,85 @@
++/**
++ * Geiss 4.30 8-bit initialization in global RNG consumption order.
++ *
++ * Source: `main.cpp::FX_Init`. This object intentionally owns values that look
++ * unrelated: splitting them into independently seeded helpers changes every
++ * later mode/effect/palette decision.
++ */
++
++import { f32 } from "./GeissNumeric.js";
++import { MsvcRandom } from "./MsvcRandom.js";
++import {
++  createDotChaserState8,
++  createShadeBobParameters,
++  type ExactEffects8State,
++} from "./ExactEffects8.js";
++
++export interface GeissInitialization8Options {
++  readonly seed: number;
++  readonly width: number;
++  readonly height: number;
++  readonly centerX: number;
++  readonly centerY: number;
++  readonly cut?: number;
++  readonly hideCut?: number;
++  readonly fpsAtModeSwitch?: number;
++}
++
++export interface GeissInitialization8Result {
++  readonly rng: MsvcRandom;
++  readonly effectState: ExactEffects8State;
++  readonly scatter: Float32Array;
++  readonly paletteFrequencies: Float32Array;
++  readonly mode7RandomArray: Float32Array;
++}
++
++const SCATTER_VALUES = 226;
++const MODE7_RANDOM_VALUES = 2345;
++
++export function initializeGeiss8(options: GeissInitialization8Options): GeissInitialization8Result {
++  const rng = new MsvcRandom(options.seed);
++
++  // Exact first RNG consumer in FX_Init after srand().
++  const chaserOffset = rng.nextInt(40000);
++
++  const scatter = new Float32Array(SCATTER_VALUES);
++  for (let i = 0; i < scatter.length; i++) {
++    scatter[i] = f32(0.05 - 0.025 * rng.nextInt(1000) * 0.001);
++  }
++
++  // chaser_x/y and sqrt_tab consume no randomness.
++  const shade = createShadeBobParameters(rng);
++
++  const paletteFrequencies = new Float32Array(6);
++  for (let i = 0; i < paletteFrequencies.length; i++) {
++    paletteFrequencies[i] = f32(rng.nextInt(1000) * 0.001 * 0.01 + 0.02);
++  }
++
++  const mode7RandomArray = new Float32Array(MODE7_RANDOM_VALUES);
++  for (let i = 0; i < mode7RandomArray.length; i++) {
++    mode7RandomArray[i] = f32(rng.nextInt(100) * 0.0005);
++  }
++
++  const effectState: ExactEffects8State = {
++    width: options.width,
++    height: options.height,
++    centerX: options.centerX,
++    centerY: options.centerY,
++    cut: options.cut ?? 4,
++    hideCut: options.hideCut ?? 4,
++    fpsAtModeSwitch: options.fpsAtModeSwitch ?? 30,
++    floatFrame: 0,
++    intFrame: 0,
++    chaserOffset,
++    mode: 1,
++    centerDwindle: 1,
++    solarMax: 400,
++    gridDirection: -1,
++    soundActive: false,
++    soundEmpty: true,
++    shade,
++    dotChaser: createDotChaserState8(),
++  };
++
++  return { rng, effectState, scatter, paletteFrequencies, mode7RandomArray };
++}

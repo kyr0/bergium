@@ -1,0 +1,57 @@
+From 102148f5c143b838ddcfbb65b8ffb1b4f4ccf674 Mon Sep 17 00:00:00 2001
+From: OpenAI <patches@openai.invalid>
+Date: Wed, 29 Jul 2026 21:27:45 +0000
+Subject: [PATCH 10/10] docs(geiss): separate legacy effects from exact
+ implementation
+
+---
+ .../src/pipelines/geiss/reference/Effects.ts  | 35 ++++++++++++++-----
+ 1 file changed, 27 insertions(+), 8 deletions(-)
+
+diff --git a/packages/bergium/src/pipelines/geiss/reference/Effects.ts b/packages/bergium/src/pipelines/geiss/reference/Effects.ts
+index b81a8e9..1d171e7 100644
+--- a/packages/bergium/src/pipelines/geiss/reference/Effects.ts
++++ b/packages/bergium/src/pipelines/geiss/reference/Effects.ts
+@@ -1,15 +1,34 @@
+ /**
+- * Geiss visual effects - faithful ports of vendor/geiss/main.cpp RenderFX().
++ * Legacy prototype effect shims.
+  *
+- * Each effect paints additive content into a Uint8Array (W*H bytes, one per texel)
+- * that gets max-blended into the feedback buffer as a preWarp contribution.
+- *
+- * Ported from vendor/geiss/main.cpp:
+- *   - ShadeBobs/SPECTRAL (lines 8431-8620): frequency-driven blob nodes
+- *   - Two_Chasers (line 5490): two chasing points
+- *   - Grid (line 5521): grid pattern
++ * These functions are retained only so the current GPU demo keeps compiling
++ * during migration. They are visual approximations and MUST NOT be used by a
++ * `geiss-4.30-*exact` profile. The source-shaped ordered 8-bit implementation is
++ * exported from `ExactEffects8.ts` below.
+  */
+ 
++export {
++  createDotChaserState8,
++  createShadeBobParameters,
++  diminishCenter8,
++  dotChaser8,
++  grid8,
++  nuclidePreWarp8,
++  renderExactEffects8,
++  selectedSolarParticles8,
++  shadeBobs8,
++  solarParticles320_8,
++  solarParticles8,
++  solidLine8,
++  twoChasers8,
++} from "./ExactEffects8.js";
++export type {
++  DotChaserState8,
++  ExactEffectSelection8,
++  ExactEffects8State,
++  ShadeBobParameters,
++} from "./ExactEffects8.js";
++
+ /** Pre-computed sqrt lookup table for circular falloff (vendor: sqrt_tab[21][21]). */
+ const SQRT_TAB: Float32Array = (() => {
+   const tab = new Float32Array(21 * 21);

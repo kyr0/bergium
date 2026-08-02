@@ -1,0 +1,289 @@
+From 272a0002fab66b2b22dd3eac72f71f6bf73f78ed Mon Sep 17 00:00:00 2001
+From: OpenAI <patches@openai.invalid>
+Date: Wed, 29 Jul 2026 21:25:18 +0000
+Subject: [PATCH 05/10] feat(geiss): add portable classic frame executor and
+ zero-readback presenter
+
+---
+ .../geiss/gpu/GeissScalarPresenter.ts         | 158 ++++++++++++++++++
+ .../geiss/reference/GeissClassicFrame8.ts     | 106 ++++++++++++
+ 2 files changed, 264 insertions(+)
+ create mode 100644 packages/bergium/src/pipelines/geiss/gpu/GeissScalarPresenter.ts
+ create mode 100644 packages/bergium/src/pipelines/geiss/reference/GeissClassicFrame8.ts
+
+diff --git a/packages/bergium/src/pipelines/geiss/gpu/GeissScalarPresenter.ts b/packages/bergium/src/pipelines/geiss/gpu/GeissScalarPresenter.ts
+new file mode 100644
+index 0000000..9b6b871
+--- /dev/null
++++ b/packages/bergium/src/pipelines/geiss/gpu/GeissScalarPresenter.ts
+@@ -0,0 +1,158 @@
++/**
++ * Zero-readback WebGL2 presenter for a CPU-simulated scalar Geiss frame.
++ *
++ * The exact/portable classic backend uploads one W*H byte plane. Palette lookup,
++ * Y orientation, scaling and final presentation remain on the GPU. No ImageData,
++ * temporary canvas or `readPixels()` is involved.
++ */
++
++import type { RGB } from "../reference/Palette.js";
++import { u8 } from "../reference/GeissNumeric.js";
++
++const VERTEX = `#version 300 es
++precision highp float;
++out vec2 vUv;
++void main() {
++  vec2 p = vec2((gl_VertexID << 1) & 2, gl_VertexID & 2);
++  vUv = p;
++  gl_Position = vec4(p * 2.0 - 1.0, 0.0, 1.0);
++}`;
++
++const FRAGMENT = `#version 300 es
++precision highp float;
++in vec2 vUv;
++uniform sampler2D uIntensity;
++uniform sampler2D uPalette;
++out vec4 outColor;
++void main() {
++  // CPU raster order is top-to-bottom; WebGL texture row zero is bottom.
++  float intensity = texelFetch(uIntensity, ivec2(
++    int(clamp(vUv.x, 0.0, 0.999999) * float(textureSize(uIntensity, 0).x)),
++    int(clamp(1.0 - vUv.y, 0.0, 0.999999) * float(textureSize(uIntensity, 0).y))
++  ), 0).r;
++  int index = int(intensity * 255.0 + 0.5);
++  outColor = texelFetch(uPalette, ivec2(index, 0), 0);
++}`;
++
++function compile(gl: WebGL2RenderingContext, type: number, source: string): WebGLShader {
++  const shader = gl.createShader(type);
++  if (!shader) throw new Error("Failed to allocate WebGL shader");
++  gl.shaderSource(shader, source);
++  gl.compileShader(shader);
++  if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
++    const log = gl.getShaderInfoLog(shader) ?? "unknown shader error";
++    gl.deleteShader(shader);
++    throw new Error(log);
++  }
++  return shader;
++}
++
++function link(gl: WebGL2RenderingContext): WebGLProgram {
++  const vertex = compile(gl, gl.VERTEX_SHADER, VERTEX);
++  const fragment = compile(gl, gl.FRAGMENT_SHADER, FRAGMENT);
++  const program = gl.createProgram();
++  if (!program) throw new Error("Failed to allocate WebGL program");
++  gl.attachShader(program, vertex);
++  gl.attachShader(program, fragment);
++  gl.linkProgram(program);
++  gl.deleteShader(vertex);
++  gl.deleteShader(fragment);
++  if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
++    const log = gl.getProgramInfoLog(program) ?? "unknown link error";
++    gl.deleteProgram(program);
++    throw new Error(log);
++  }
++  return program;
++}
++
++export class GeissScalarPresenter {
++  private readonly program: WebGLProgram;
++  private readonly vao: WebGLVertexArrayObject;
++  private readonly intensity: WebGLTexture;
++  private readonly palette: WebGLTexture;
++  private readonly paletteBytes = new Uint8Array(256 * 4);
++  private readonly intensityLocation: WebGLUniformLocation | null;
++  private readonly paletteLocation: WebGLUniformLocation | null;
++
++  public constructor(
++    private readonly gl: WebGL2RenderingContext,
++    private readonly width: number,
++    private readonly height: number,
++  ) {
++    this.program = link(gl);
++    const vao = gl.createVertexArray();
++    const intensity = gl.createTexture();
++    const palette = gl.createTexture();
++    if (!vao || !intensity || !palette) throw new Error("Failed to allocate Geiss presenter resources");
++    this.vao = vao;
++    this.intensity = intensity;
++    this.palette = palette;
++    this.intensityLocation = gl.getUniformLocation(this.program, "uIntensity");
++    this.paletteLocation = gl.getUniformLocation(this.program, "uPalette");
++
++    gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
++    gl.bindTexture(gl.TEXTURE_2D, intensity);
++    gl.texStorage2D(gl.TEXTURE_2D, 1, gl.R8, width, height);
++    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
++    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
++    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
++    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
++
++    gl.bindTexture(gl.TEXTURE_2D, palette);
++    gl.texStorage2D(gl.TEXTURE_2D, 1, gl.RGBA8, 256, 1);
++    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
++    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
++    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
++    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
++  }
++
++  public setPalette(colors: readonly RGB[]): void {
++    if (colors.length !== 256) throw new RangeError(`Palette has ${colors.length} entries, expected 256`);
++    for (let i = 0; i < 256; i++) {
++      const color = colors[i]!;
++      const o = i * 4;
++      this.paletteBytes[o] = u8(Math.max(0, Math.min(255, Math.round(color.r))));
++      this.paletteBytes[o + 1] = u8(Math.max(0, Math.min(255, Math.round(color.g))));
++      this.paletteBytes[o + 2] = u8(Math.max(0, Math.min(255, Math.round(color.b))));
++      this.paletteBytes[o + 3] = 255;
++    }
++    const gl = this.gl;
++    gl.bindTexture(gl.TEXTURE_2D, this.palette);
++    gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, 256, 1, gl.RGBA, gl.UNSIGNED_BYTE, this.paletteBytes);
++  }
++
++  public upload(frame: Uint8Array): void {
++    if (frame.length !== this.width * this.height) {
++      throw new RangeError(`Scalar frame has ${frame.length} bytes, expected ${this.width * this.height}`);
++    }
++    const gl = this.gl;
++    gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
++    gl.bindTexture(gl.TEXTURE_2D, this.intensity);
++    gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, this.width, this.height, gl.RED, gl.UNSIGNED_BYTE, frame);
++  }
++
++  public present(viewportWidth: number, viewportHeight: number): void {
++    const gl = this.gl;
++    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
++    gl.viewport(0, 0, viewportWidth, viewportHeight);
++    gl.disable(gl.BLEND);
++    gl.useProgram(this.program);
++    gl.activeTexture(gl.TEXTURE0);
++    gl.bindTexture(gl.TEXTURE_2D, this.intensity);
++    gl.uniform1i(this.intensityLocation, 0);
++    gl.activeTexture(gl.TEXTURE1);
++    gl.bindTexture(gl.TEXTURE_2D, this.palette);
++    gl.uniform1i(this.paletteLocation, 1);
++    gl.bindVertexArray(this.vao);
++    gl.drawArrays(gl.TRIANGLES, 0, 3);
++    gl.bindVertexArray(null);
++  }
++
++  public destroy(): void {
++    const gl = this.gl;
++    gl.deleteTexture(this.intensity);
++    gl.deleteTexture(this.palette);
++    gl.deleteVertexArray(this.vao);
++    gl.deleteProgram(this.program);
++  }
++}
+diff --git a/packages/bergium/src/pipelines/geiss/reference/GeissClassicFrame8.ts b/packages/bergium/src/pipelines/geiss/reference/GeissClassicFrame8.ts
+new file mode 100644
+index 0000000..3ddcd0e
+--- /dev/null
++++ b/packages/bergium/src/pipelines/geiss/reference/GeissClassicFrame8.ts
+@@ -0,0 +1,106 @@
++/**
++ * Allocation-free portable 8-bit classic frame executor.
++ *
++ * This is the integration seam for the source-shaped CPU backend. It preserves
++ * Geiss's observable pass order while deliberately naming the current warp as
++ * `portable-four-tap`; the active historical x86 pair-accumulator kernel must be
++ * added as a separate backend rather than falsely relabeling this implementation.
++ */
++
++import type { RandomSource, MapTexel } from "./MapField.js";
++import { warpIntensity8, type IntensityFrame } from "./FeedbackWarp.js";
++import {
++  renderExactEffects8,
++  type ExactEffectSelection8,
++  type ExactEffects8State,
++} from "./ExactEffects8.js";
++import { renderWave, type WaveRenderInput } from "./WaveformRenderer.js";
++import { advanceFrameClock, createFrameClock, type FrameClock } from "./FrameClock.js";
++
++export type GeissWarp8Profile = "portable-four-tap";
++
++export interface GeissClassicFrame8Step {
++  readonly fps: number;
++  readonly effects: ExactEffectSelection8;
++  /** Ordered post-warp mutation, e.g. RenderDots/audio-triggered Nuclide. */
++  readonly postWarp?: (frame: IntensityFrame) => void;
++  /** Waveform is always written after the warp and post-warp dots. */
++  readonly waveform?: Omit<WaveRenderInput, "frame">;
++}
++
++export class GeissClassicFrame8 {
++  public readonly warpProfile: GeissWarp8Profile = "portable-four-tap";
++  public readonly clock: FrameClock = createFrameClock();
++
++  private front: IntensityFrame;
++  private back: IntensityFrame;
++  private map: readonly MapTexel[];
++
++  public constructor(
++    private readonly width: number,
++    private readonly height: number,
++    map: readonly MapTexel[],
++    private readonly effectState: ExactEffects8State,
++    private readonly rng: RandomSource,
++  ) {
++    const pixels = width * height;
++    if (map.length !== pixels) {
++      throw new RangeError(`Map has ${map.length} entries, expected ${pixels}`);
++    }
++    if (effectState.width !== width || effectState.height !== height) {
++      throw new RangeError("Effect state dimensions do not match the frame executor");
++    }
++    this.map = map;
++    // The source allocates safety padding. Typed arrays make out-of-range writes a
++    // no-op, but retaining padding also makes source-adjacent effects auditable.
++    this.front = new Uint8Array(pixels + 2048);
++    this.back = new Uint8Array(pixels + 2048);
++  }
++
++  public setMap(map: readonly MapTexel[]): void {
++    if (map.length !== this.width * this.height) {
++      throw new RangeError(`Map has ${map.length} entries, expected ${this.width * this.height}`);
++    }
++    this.map = map;
++  }
++
++  /** Source initialization is zero; explicit seeding exists only for fixtures. */
++  public seedFront(bytes: Uint8Array): void {
++    if (bytes.length !== this.width * this.height) {
++      throw new RangeError(`Seed has ${bytes.length} bytes, expected ${this.width * this.height}`);
++    }
++    this.front.fill(0);
++    this.front.set(bytes);
++  }
++
++  public clear(): void {
++    this.front.fill(0);
++    this.back.fill(0);
++  }
++
++  public step(input: GeissClassicFrame8Step): Uint8Array {
++    // `RenderFX` advances these counters before evaluating any effect.
++    advanceFrameClock(this.clock, input.fps);
++    this.effectState.floatFrame = this.clock.floatframe;
++    this.effectState.intFrame = this.clock.intframe;
++
++    renderExactEffects8(this.front, this.effectState, input.effects, this.rng);
++    warpIntensity8(this.front, this.back, this.map, this.width);
++    input.postWarp?.(this.back);
++    if (input.waveform) renderWave({ ...input.waveform, frame: this.back });
++
++    const previous = this.front;
++    this.front = this.back;
++    this.back = previous;
++    return this.currentFrame();
++  }
++
++  /** Visible scalar frame; safety padding is never exposed to presentation. */
++  public currentFrame(): Uint8Array {
++    return this.front.subarray(0, this.width * this.height);
++  }
++
++  public scratchBackFrame(): Uint8Array {
++    return this.back.subarray(0, this.width * this.height);
++  }
++}

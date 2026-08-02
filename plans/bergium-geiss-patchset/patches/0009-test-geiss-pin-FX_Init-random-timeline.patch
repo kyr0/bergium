@@ -1,0 +1,59 @@
+From 73638dc3ec36d82b7470eb9aabc345c8be7fe6ac Mon Sep 17 00:00:00 2001
+From: OpenAI <patches@openai.invalid>
+Date: Wed, 29 Jul 2026 21:27:21 +0000
+Subject: [PATCH 09/10] test(geiss): pin FX_Init random timeline
+
+---
+ .../oracle/geiss-initialization8.test.ts      | 43 +++++++++++++++++++
+ 1 file changed, 43 insertions(+)
+ create mode 100644 packages/bergium/tests/oracle/geiss-initialization8.test.ts
+
+diff --git a/packages/bergium/tests/oracle/geiss-initialization8.test.ts b/packages/bergium/tests/oracle/geiss-initialization8.test.ts
+new file mode 100644
+index 0000000..4c2565a
+--- /dev/null
++++ b/packages/bergium/tests/oracle/geiss-initialization8.test.ts
+@@ -0,0 +1,43 @@
++import { test } from "vitest";
++import assert from "node:assert/strict";
++import { initializeGeiss8 } from "../../src/pipelines/geiss/reference/GeissInitialization8.js";
++
++test("8-bit initialization preserves the FX_Init RNG timeline", () => {
++  const result = initializeGeiss8({
++    seed: 1,
++    width: 640,
++    height: 480,
++    centerX: 320,
++    centerY: 240,
++  });
++
++  assert.equal(result.effectState.chaserOffset, 41);
++  assert.deepEqual(result.rng.checkpoint(), { state: 2994708609, calls: 2688 });
++  assert.deepEqual(Array.from(result.scatter.slice(0, 5)), [
++    0.038325000554323196,
++    0.04165000095963478,
++    0.03750000149011612,
++    0.045775000005960464,
++    0.03189999982714653,
++  ]);
++  assert.deepEqual(Array.from(result.effectState.shade.c1.slice(0, 3)), [
++    0.13561999797821045,
++    0.12841999530792236,
++    0.12599000334739685,
++  ]);
++  assert.deepEqual(Array.from(result.paletteFrequencies), [
++    0.02670999988913536,
++    0.027860000729560852,
++    0.022630000486969948,
++    0.02312999963760376,
++    0.02355000004172325,
++    0.021849999204277992,
++  ]);
++  assert.deepEqual(Array.from(result.mode7RandomArray.slice(0, 5)), [
++    0.026499999687075615,
++    0.006000000052154064,
++    0.004000000189989805,
++    0.01600000075995922,
++    0.02250000089406967,
++  ]);
++});

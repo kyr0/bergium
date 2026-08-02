@@ -1,0 +1,215 @@
+From e4a9f5c7e746d355d528046c3e4cf4dfad2fde64 Mon Sep 17 00:00:00 2001
+From: OpenAI <patches@openai.invalid>
+Date: Wed, 29 Jul 2026 21:23:48 +0000
+Subject: [PATCH 04/10] test(geiss): pin numeric map and 8-bit effect fixtures
+
+---
+ .../tests/oracle/geiss-exact-effects8.test.ts | 115 ++++++++++++++++++
+ .../oracle/geiss-numeric-map-exact.test.ts    |  76 ++++++++++++
+ 2 files changed, 191 insertions(+)
+ create mode 100644 packages/bergium/tests/oracle/geiss-exact-effects8.test.ts
+ create mode 100644 packages/bergium/tests/oracle/geiss-numeric-map-exact.test.ts
+
+diff --git a/packages/bergium/tests/oracle/geiss-exact-effects8.test.ts b/packages/bergium/tests/oracle/geiss-exact-effects8.test.ts
+new file mode 100644
+index 0000000..c6a4440
+--- /dev/null
++++ b/packages/bergium/tests/oracle/geiss-exact-effects8.test.ts
+@@ -0,0 +1,115 @@
++import { test } from "vitest";
++import assert from "node:assert/strict";
++import {
++  createDotChaserState8,
++  createShadeBobParameters,
++  diminishCenter8,
++  dotChaser8,
++  grid8,
++  shadeBobs8,
++  solidLine8,
++  twoChasers8,
++  type ExactEffects8State,
++  type ShadeBobParameters,
++} from "../../src/pipelines/geiss/reference/ExactEffects8.js";
++import { MsvcRandom } from "../../src/pipelines/geiss/reference/MsvcRandom.js";
++
++function fnv1a64(data: Uint8Array): string {
++  let hash = 0xcbf29ce484222325n;
++  for (const byte of data) {
++    hash ^= BigInt(byte);
++    hash = BigInt.asUintN(64, hash * 0x100000001b3n);
++  }
++  return hash.toString(16).padStart(16, "0");
++}
++
++function zeroShade(): ShadeBobParameters {
++  const a = (): Float32Array => new Float32Array(10);
++  return {
++    c1: a(), c2: a(), c3: a(),
++    f1: a(), f2: a(), f3: a(), f4: a(),
++    radius0: a(), radius1: a(), radius2: a(), radius3: a(),
++  };
++}
++
++function state(shade: ShadeBobParameters): ExactEffects8State {
++  return {
++    width: 640,
++    height: 480,
++    centerX: 320,
++    centerY: 240,
++    cut: 4,
++    hideCut: 4,
++    fpsAtModeSwitch: 30,
++    floatFrame: 123.25,
++    intFrame: 77,
++    chaserOffset: 1234,
++    mode: 4,
++    centerDwindle: 0.98,
++    solarMax: 34,
++    gridDirection: -1,
++    soundActive: true,
++    soundEmpty: false,
++    shade,
++    dotChaser: createDotChaserState8(),
++  };
++}
++
++test("ShadeBobs performs four ordered jitter writes and consumes eight random values", () => {
++  const frame = new Uint8Array(640 * 480);
++  const effectState = state(zeroShade());
++  // nextInt(5) == 2 on every call => zero X/Y jitter.
++  const rng = {
++    calls: 0,
++    nextRaw(): number { this.calls++; return 2; },
++    nextInt(maxExclusive: number): number { assert.equal(maxExclusive, 5); return this.nextRaw(); },
++    nextFloat(): number { return this.nextRaw() / 32768; },
++  };
++
++  shadeBobs8(frame, effectState, 1, rng);
++  const center = effectState.centerY * effectState.width + effectState.centerX;
++  assert.equal(frame[center], 8);
++  assert.equal(frame[center - 1], 4);
++  assert.equal(frame[center + 1], 4);
++  assert.equal(frame[center - effectState.width], 4);
++  assert.equal(frame[center + effectState.width], 4);
++  assert.equal(rng.calls, 8);
++});
++
++test("exact 8-bit effect stages match the independent C fixture", () => {
++  const width = 640;
++  const height = 480;
++  // Extra bytes mirror the source allocation safety margin; the fixture hashes
++  // only the visible W*H scalar frame.
++  const frame = new Uint8Array(width * height + 2048);
++  for (let i = 0; i < width * height; i++) {
++    frame[i] = (i * 17 + Math.trunc(i / width) * 3) & 0xff;
++  }
++
++  const rng = new MsvcRandom(1);
++  const effectState = state(createShadeBobParameters(rng));
++  const visible = (): Uint8Array => frame.subarray(0, width * height);
++
++  assert.equal(fnv1a64(visible()), "be58dfc32a472d25");
++  assert.deepEqual(rng.checkpoint(), { state: 1467105343, calls: 110 });
++
++  shadeBobs8(frame, effectState, 1, rng);
++  assert.equal(fnv1a64(visible()), "ea0f086a15a5cd3e");
++  assert.deepEqual(rng.checkpoint(), { state: 1020636519, calls: 118 });
++
++  twoChasers8(frame, effectState, 2);
++  assert.equal(fnv1a64(visible()), "b2f8350ae05aee6a");
++
++  solidLine8(frame, effectState);
++  assert.equal(fnv1a64(visible()), "4e8c2f0e4538207a");
++
++  dotChaser8(frame, effectState);
++  assert.equal(fnv1a64(visible()), "9172abc3812c24a9");
++  assert.equal(effectState.dotChaser.pointer, 1);
++
++  grid8(frame, effectState);
++  assert.equal(fnv1a64(visible()), "421021c1dc80675a");
++
++  diminishCenter8(frame, effectState);
++  assert.equal(fnv1a64(visible()), "1a956297b3b7fc4c");
++});
+diff --git a/packages/bergium/tests/oracle/geiss-numeric-map-exact.test.ts b/packages/bergium/tests/oracle/geiss-numeric-map-exact.test.ts
+new file mode 100644
+index 0000000..a34b9e2
+--- /dev/null
++++ b/packages/bergium/tests/oracle/geiss-numeric-map-exact.test.ts
+@@ -0,0 +1,76 @@
++import { test } from "vitest";
++import assert from "node:assert/strict";
++import { cTrunc, i16, i8, u8 } from "../../src/pipelines/geiss/reference/GeissNumeric.js";
++import {
++  quantizeMapTexel,
++  quantizeMapTexelExact,
++  type MapParameters,
++} from "../../src/pipelines/geiss/reference/MapField.js";
++import { MsvcRandom } from "../../src/pipelines/geiss/reference/MsvcRandom.js";
++
++const params = (overrides: Partial<MapParameters> = {}): MapParameters => ({
++  mode: 2,
++  width: 640,
++  height: 480,
++  centerX: 320,
++  centerY: 240,
++  scale1: 2.001,
++  scale2: 1,
++  turn1: 0,
++  turn2: 0,
++  f1: 0,
++  f2: 0,
++  f3: 0,
++  damping: 1,
++  weightSum: 256,
++  fpsAtModeSwitch: 30,
++  nuclideSelected: false,
++  influences: [],
++  randomNoise: new Float32Array(2345),
++  randomNoisePosition: { value: 0 },
++  ...overrides,
++});
++
++test("C numeric helpers preserve truncation and signed/unsigned wrapping", () => {
++  assert.equal(cTrunc(-1.9), -1);
++  assert.equal(cTrunc(1.9), 1);
++  assert.equal(u8(-1), 255);
++  assert.equal(u8(257.9), 1);
++  assert.equal(i8(255), -1);
++  assert.equal(i16(0xffff), -1);
++  assert.equal(i16(0x8000), -32768);
++});
++
++test("MsvcRandom checkpoint restores both sequence state and call count", () => {
++  const rng = new MsvcRandom(1);
++  assert.deepEqual([rng.nextRaw(), rng.nextRaw(), rng.nextRaw()], [41, 18467, 6334]);
++  const checkpoint = rng.checkpoint();
++  const suffix = [rng.nextRaw(), rng.nextRaw(), rng.nextRaw()];
++  assert.equal(rng.callCount, 6);
++  rng.restore(checkpoint);
++  assert.equal(rng.callCount, 3);
++  assert.deepEqual([rng.nextRaw(), rng.nextRaw(), rng.nextRaw()], suffix);
++});
++
++test("source-exact map quantization retains negative fractions and byte wrapping", () => {
++  const safe = quantizeMapTexel(0, 2, params(), new MsvcRandom(1));
++  const exact = quantizeMapTexelExact(0, 2, params(), new MsvcRandom(1));
++
++  assert.deepEqual(safe, {
++    sourceX: 0,
++    sourceY: 2,
++    w00: 19,
++    w10: 40,
++    w01: 61,
++    w11: 131,
++  });
++  assert.deepEqual(exact, {
++    sourceX: 0,
++    sourceY: 2,
++    w00: 100,
++    w10: 212,
++    w01: 237,
++    w11: 216,
++  });
++  assert.notDeepEqual(exact, safe);
++});

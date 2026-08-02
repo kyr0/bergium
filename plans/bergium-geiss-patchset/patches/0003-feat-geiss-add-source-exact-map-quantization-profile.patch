@@ -1,0 +1,98 @@
+From a8fc44211d68b5398224d71e699dbe510ca5b3e8 Mon Sep 17 00:00:00 2001
+From: OpenAI <patches@openai.invalid>
+Date: Wed, 29 Jul 2026 21:21:14 +0000
+Subject: [PATCH 03/10] feat(geiss): add source-exact map quantization profile
+
+---
+ .../src/pipelines/geiss/reference/MapField.ts | 72 +++++++++++++++----
+ 1 file changed, 58 insertions(+), 14 deletions(-)
+
+diff --git a/packages/bergium/src/pipelines/geiss/reference/MapField.ts b/packages/bergium/src/pipelines/geiss/reference/MapField.ts
+index ce31daa..f434fde 100644
+--- a/packages/bergium/src/pipelines/geiss/reference/MapField.ts
++++ b/packages/bergium/src/pipelines/geiss/reference/MapField.ts
+@@ -1,4 +1,5 @@
+ import { CUSTOM_VECTORS, ROTATION_DITHER, interpolationWeightSum } from "./ClassicConfig.js";
++import { cTrunc, u8 } from "./GeissNumeric.js";
+ 
+ export interface RandomSource { nextRaw(): number; nextInt(maxExclusive: number): number; nextFloat(): number; }
+ export interface Influence { x: number; y: number; i: number; j: number; type: 0 | 1 | 2; }
+@@ -71,21 +72,64 @@ export function sourceCoordinate(x: number, y: number, p: MapParameters, rng: Ra
+   return [sx, sy];
+ }
+ 
+-export function quantizeMapTexel(x: number, y: number, p: MapParameters, rng: RandomSource): MapTexel {
++export type MapQuantizationProfile = "safe-floor" | "source-trunc-wrap";
++
++/**
++ * Quantize one destination-to-source map entry.
++ *
++ * `safe-floor` is the previous portable behavior: fractions stay in [0,1) and
++ * weights form a convex combination. `source-trunc-wrap` reproduces the active C
++ * map builder: `(int)` truncates toward zero, fractions may become negative, and
++ * each independently computed weight is cast to `unsigned char` (wrapping mod
++ * 256). The latter can look suspicious but is reachable source behavior.
++ */
++export function quantizeMapTexelWithProfile(
++  x: number,
++  y: number,
++  p: MapParameters,
++  rng: RandomSource,
++  profile: MapQuantizationProfile,
++): MapTexel {
+   let [sx, sy] = sourceCoordinate(x, y, p, rng);
+-  let damping = p.damping * 30 / p.fpsAtModeSwitch;
++  const damping = p.damping * 30 / p.fpsAtModeSwitch;
+   // p.damping is already clamped and halved for dampened modes at map init.
+-  sx = x * (1 - damping) + sx * damping; sy = y * (1 - damping) + sy * damping;
+-  while (sx < 0) sx += p.width - 1; while (sx > p.width - 1) sx -= p.width - 1;
+-  // Floor (not trunc) so the bilinear fraction is always in [0,1): a source
+-  // coordinate can be negative (Y has no wrap and scale can push it below 0), and
+-  // trunc(-0.3) == 0 would give a negative fraction that &255 wraps into an invalid
+-  // weight. Floor keeps the four taps a proper convex combination.
+-  let ix = Math.floor(sx), iy = Math.floor(sy);
+-  let flat = iy * p.width + ix;
++  sx = x * (1 - damping) + sx * damping;
++  sy = y * (1 - damping) + sy * damping;
++  while (sx < 0) sx += p.width - 1;
++  while (sx > p.width - 1) sx -= p.width - 1;
++
++  const rawX = profile === "source-trunc-wrap" ? cTrunc(sx) : Math.floor(sx);
++  const rawY = profile === "source-trunc-wrap" ? cTrunc(sy) : Math.floor(sy);
++  let flat = rawY * p.width + rawX;
+   flat = Math.max(p.width * 2, Math.min(p.width * (p.height - 3) - 1, flat));
+-  iy = Math.trunc(flat / p.width); ix = flat % p.width;
+-  const fx = sx - Math.floor(sx), fy = sy - Math.floor(sy);
+-  const sum = Math.trunc(p.weightSum * interpolationWeightSum(p.width, p.height) / 256);
+-  return { sourceX: ix, sourceY: iy, w00: Math.trunc((1 - fx) * (1 - fy) * sum) & 255, w10: Math.trunc(fx * (1 - fy) * sum) & 255, w01: Math.trunc((1 - fx) * fy * sum) & 255, w11: Math.trunc(fx * fy * sum) & 255 };
++  const sourceY = cTrunc(flat / p.width);
++  const sourceX = flat - sourceY * p.width;
++
++  // The source computes the fractions from the pre-clamp `(int)newx/newy`, not
++  // from the clamped flattened address. Preserve that distinction.
++  const fx = sx - rawX;
++  const fy = sy - rawY;
++  const sum = cTrunc(p.weightSum * interpolationWeightSum(p.width, p.height) / 256);
++  const castWeight = profile === "source-trunc-wrap"
++    ? u8
++    : (value: number): number => cTrunc(value) & 0xff;
++
++  return {
++    sourceX,
++    sourceY,
++    w00: castWeight((1 - fx) * (1 - fy) * sum),
++    w10: castWeight(fx * (1 - fy) * sum),
++    w01: castWeight((1 - fx) * fy * sum),
++    w11: castWeight(fx * fy * sum),
++  };
++}
++
++/** Existing portable/safe behavior. */
++export function quantizeMapTexel(x: number, y: number, p: MapParameters, rng: RandomSource): MapTexel {
++  return quantizeMapTexelWithProfile(x, y, p, rng, "safe-floor");
++}
++
++/** Source C `(int)` plus `unsigned char` weight semantics. */
++export function quantizeMapTexelExact(x: number, y: number, p: MapParameters, rng: RandomSource): MapTexel {
++  return quantizeMapTexelWithProfile(x, y, p, rng, "source-trunc-wrap");
+ }

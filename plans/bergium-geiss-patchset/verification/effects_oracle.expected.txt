@@ -1,0 +1,7 @@
+init be58dfc32a472d25 rng=110 state=1467105343
+shade ea0f086a15a5cd3e rng=118 state=1020636519
+chasers b2f8350ae05aee6a
+solid 4e8c2f0e4538207a
+dot 9172abc3812c24a9 ptr=1
+grid 421021c1dc80675a
+diminish 1a956297b3b7fc4c

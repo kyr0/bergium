@@ -1,0 +1,123 @@
+From 68a40661afcdfc38fdca7e4890df86e027c5fad2 Mon Sep 17 00:00:00 2001
+From: OpenAI <patches@openai.invalid>
+Date: Wed, 29 Jul 2026 21:26:00 +0000
+Subject: [PATCH 06/10] feat(geiss): preserve source-timed pending map
+ generation
+
+---
+ .../geiss/reference/ExactMapBuilder.ts        | 106 ++++++++++++++++++
+ 1 file changed, 106 insertions(+)
+ create mode 100644 packages/bergium/src/pipelines/geiss/reference/ExactMapBuilder.ts
+
+diff --git a/packages/bergium/src/pipelines/geiss/reference/ExactMapBuilder.ts b/packages/bergium/src/pipelines/geiss/reference/ExactMapBuilder.ts
+new file mode 100644
+index 0000000..75febb1
+--- /dev/null
++++ b/packages/bergium/src/pipelines/geiss/reference/ExactMapBuilder.ts
+@@ -0,0 +1,106 @@
++/**
++ * Source-timed pending-map construction.
++ *
++ * Geiss does not normally generate a complete map at mode switch. It advances a
++ * linear `y_map_pos` budget each frame. This matters for mode 14 because every
++ * generated pixel consumes the global `rand()` stream; eager generation changes
++ * later effect, palette and title choices even if the final map is identical.
++ */
++
++import type { MapParameters, MapTexel, RandomSource } from "./MapField.js";
++import { quantizeMapTexelExact } from "./MapField.js";
++import { interpolationWeightSum } from "./ClassicConfig.js";
++
++export interface ExactMapProgress {
++  readonly generatedPixels: number;
++  readonly totalActivePixels: number;
++  readonly frameCount: number;
++  readonly complete: boolean;
++}
++
++function identityTexel(x: number, y: number, p: MapParameters): MapTexel {
++  const sum = Math.trunc(p.weightSum * interpolationWeightSum(p.width, p.height) / 256) & 0xff;
++  return { sourceX: x, sourceY: y, w00: sum, w10: 0, w01: 0, w11: 0 };
++}
++
++export class ExactMapBuilder {
++  private readonly map: MapTexel[];
++  private readonly start: number;
++  private readonly end: number;
++  private position: number;
++  private framesCrunching = 0;
++
++  public constructor(
++    private readonly parameters: MapParameters,
++    private readonly cut: number,
++    private readonly framesTillAutoSwitch: number,
++    private readonly rng: RandomSource,
++  ) {
++    const { width, height } = parameters;
++    if (!Number.isInteger(cut) || cut < 0 || cut * 2 >= height) {
++      throw new RangeError(`Invalid map cut ${cut} for height ${height}`);
++    }
++    if (!Number.isInteger(framesTillAutoSwitch) || framesTillAutoSwitch <= 0) {
++      throw new RangeError(`framesTillAutoSwitch must be positive, got ${framesTillAutoSwitch}`);
++    }
++
++    this.start = cut * width;
++    this.end = (height - cut) * width;
++    this.position = this.start;
++    this.map = new Array<MapTexel>(width * height);
++
++    // Process_Map only covers active rows. Identity border entries make the
++    // portable full-frame backend deterministic without consuming RNG.
++    for (let y = 0; y < cut; y++) {
++      for (let x = 0; x < width; x++) this.map[y * width + x] = identityTexel(x, y, parameters);
++    }
++    for (let y = height - cut; y < height; y++) {
++      for (let x = 0; x < width; x++) this.map[y * width + x] = identityTexel(x, y, parameters);
++    }
++  }
++
++  /**
++   * Generate exactly this frame's source budget. `rush=true` finishes the active
++   * map immediately but still consumes random values in raster order.
++   */
++  public step(rush = false): ExactMapProgress {
++    if (this.position >= this.end) return this.progress();
++    this.framesCrunching++;
++
++    const { width, height } = this.parameters;
++    const activeRows = height - this.cut * 2;
++    let endPosition = width * (
++      this.cut + (this.framesCrunching / this.framesTillAutoSwitch) * activeRows
++    );
++    endPosition = Math.trunc(endPosition);
++    if (rush || endPosition > this.end) endPosition = this.end;
++
++    for (; this.position < endPosition; this.position++) {
++      const y = Math.trunc(this.position / width);
++      const x = this.position - y * width;
++      this.map[this.position] = quantizeMapTexelExact(x, y, this.parameters, this.rng);
++    }
++    return this.progress();
++  }
++
++  public progress(): ExactMapProgress {
++    return {
++      generatedPixels: this.position - this.start,
++      totalActivePixels: this.end - this.start,
++      frameCount: this.framesCrunching,
++      complete: this.position >= this.end,
++    };
++  }
++
++  public currentMap(): readonly MapTexel[] {
++    if (this.position < this.end) {
++      throw new Error(`Pending map is incomplete: ${this.position - this.start}/${this.end - this.start} pixels`);
++    }
++    return this.map;
++  }
++
++  /** Test/debug view. Entries after the current position may still be undefined. */
++  public partialMap(): readonly (MapTexel | undefined)[] {
++    return this.map;
++  }
++}

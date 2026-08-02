@@ -3,7 +3,16 @@
   <img src="artwork/webamp-bergium-0.0.0.png" alt="Bergium Webamp" width="600" />
 </p>
 
-<h1 align="center">Bergium</h1>
+
+```bash
+  ____  _____ ____   ____ ___ _   _ __  __ 
+ | __ )| ____|  _ \ / ___|_ _| | | |   \/  |
+ |  _ \|  _| | |_) | |  _ | || | | |   \/| |
+ | |_) | |___|  _ <| |_| || ||   _| | |  | |
+ |____/|_____|_| \_\\____|___|\___/  _|  |_|
+  :: WEB-BASED CLASSIC MUSIC VISUALIZER ::  
+```
+
 
 <p align="center">
   Audio visualizer engine with dual rendering pipelines -  <strong>Milkdrop</strong> (butterchurn-compatible) and <strong>Geiss</strong> (GPU feedback warp) - in pure TypeScript + WebGL2.
@@ -11,7 +20,7 @@
 
 ---
 
-Bergium is a TypeScript 7, WebGL 2 audio-reactive rendering engine that runs fast in the browser even at 8K screen resolution (4K + retina) while preserving Butterchurn's public API contract and supporting multiple renderer pipelines(Milkdrop + Geiss) rendering to one canvas element. 
+BERGIUM is a TypeScript 7, WebGL 2 audio-reactive rendering engine that runs fast in the browser even at 8K screen resolution (4K + retina) while preserving Butterchurn's public API contract and supporting multiple renderer pipelines(Milkdrop + Geiss) rendering to one canvas element. 
 
 It features:
 

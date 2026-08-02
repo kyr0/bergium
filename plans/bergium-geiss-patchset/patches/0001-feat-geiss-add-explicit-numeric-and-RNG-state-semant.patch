@@ -1,0 +1,156 @@
+From 19dc64a963da2b28a7924cb3da9416c0e623bf03 Mon Sep 17 00:00:00 2001
+From: OpenAI <patches@openai.invalid>
+Date: Wed, 29 Jul 2026 21:18:33 +0000
+Subject: [PATCH 01/10] feat(geiss): add explicit numeric and RNG state
+ semantics
+
+---
+ .../pipelines/geiss/reference/GeissNumeric.ts | 67 +++++++++++++++++++
+ .../pipelines/geiss/reference/MsvcRandom.ts   | 58 +++++++++++++---
+ 2 files changed, 117 insertions(+), 8 deletions(-)
+ create mode 100644 packages/bergium/src/pipelines/geiss/reference/GeissNumeric.ts
+
+diff --git a/packages/bergium/src/pipelines/geiss/reference/GeissNumeric.ts b/packages/bergium/src/pipelines/geiss/reference/GeissNumeric.ts
+new file mode 100644
+index 0000000..ad47342
+--- /dev/null
++++ b/packages/bergium/src/pipelines/geiss/reference/GeissNumeric.ts
+@@ -0,0 +1,67 @@
++/**
++ * Explicit numeric operations used by the Geiss compatibility profiles.
++ *
++ * The original renderer relies on C/C++ conversion rules that JavaScript usually
++ * approximates accidentally. Keeping those rules named makes byte behavior
++ * reviewable and prevents "helpful" clamps from changing the feedback system.
++ */
++
++/** Round a value to IEEE-754 binary32, matching assignment to a C `float`. */
++export const f32 = Math.fround;
++
++/** C/C++ float-to-integer conversion for finite values: truncate toward zero. */
++export function cTrunc(value: number): number {
++  if (!Number.isFinite(value)) {
++    throw new RangeError(`Cannot convert non-finite value ${value} to a C integer`);
++  }
++  return Math.trunc(value);
++}
++
++/** Assignment/conversion to an unsigned 8-bit byte. */
++export function u8(value: number): number {
++  return cTrunc(value) & 0xff;
++}
++
++/** Assignment/conversion to a signed 8-bit integer. */
++export function i8(value: number): number {
++  const byte = u8(value);
++  return byte < 0x80 ? byte : byte - 0x100;
++}
++
++/** Assignment/conversion to a signed 16-bit integer. */
++export function i16(value: number): number {
++  const word = cTrunc(value) & 0xffff;
++  return word < 0x8000 ? word : word - 0x10000;
++}
++
++/** `sinf`-shaped operation: binary32 input and binary32 result. */
++export function sinf(value: number): number {
++  return f32(Math.sin(f32(value)));
++}
++
++/** `cosf`-shaped operation: binary32 input and binary32 result. */
++export function cosf(value: number): number {
++  return f32(Math.cos(f32(value)));
++}
++
++/** `sqrtf`-shaped operation: binary32 input and binary32 result. */
++export function sqrtf(value: number): number {
++  return f32(Math.sqrt(f32(value)));
++}
++
++/** Unsigned-byte `+=` semantics: integer promotion followed by byte wrapping. */
++export function addU8Wrapping(frame: Uint8Array, index: number, value: number): void {
++  frame[index] = u8(frame[index]! + cTrunc(value));
++}
++
++/** Saturating byte addition used by the Nuclide effects. */
++export function addU8Saturating(frame: Uint8Array, index: number, value: number): void {
++  const next = frame[index]! + cTrunc(value);
++  frame[index] = next > 255 ? 255 : next < 0 ? 0 : next;
++}
++
++/** Source-style maximum write with byte conversion. */
++export function maxU8(frame: Uint8Array, index: number, value: number): void {
++  const byte = u8(value);
++  if (frame[index]! < byte) frame[index] = byte;
++}
+diff --git a/packages/bergium/src/pipelines/geiss/reference/MsvcRandom.ts b/packages/bergium/src/pipelines/geiss/reference/MsvcRandom.ts
+index b6f6112..24b6eee 100644
+--- a/packages/bergium/src/pipelines/geiss/reference/MsvcRandom.ts
++++ b/packages/bergium/src/pipelines/geiss/reference/MsvcRandom.ts
+@@ -1,16 +1,58 @@
+ import type { RandomSource } from "./MapField.js";
+ 
++export interface MsvcRandomCheckpoint {
++  readonly state: number;
++  readonly calls: number;
++}
++
+ /**
+  * Declared exact-profile PRNG: the Visual C runtime `rand()` LCG
+- * (state = state*214013 + 2531011; raw = (state >>> 16) & 0x7fff). The output is
+- * pinned to the canonical MSVC sequence by `tests/oracle/msvc-random.test.ts`; the
+- * pinned Geiss C source is a read-only reference, never built or instrumented.
++ * (state = state*214013 + 2531011; raw = (state >>> 16) & 0x7fff).
++ *
++ * The call counter is part of the compatibility state. Two implementations can
++ * produce the same first few values yet diverge visually after consuming a
++ * different number of random values during map/effect initialization.
+  */
+ export class MsvcRandom implements RandomSource {
+   private state: number;
+-  public constructor(seed: number) { this.state = seed >>> 0; }
+-  public nextRaw(): number { this.state = (Math.imul(this.state, 214013) + 2531011) >>> 0; return (this.state >>> 16) & 0x7fff; }
+-  public nextInt(maxExclusive: number): number { return this.nextRaw() % maxExclusive; }
+-  public nextFloat(): number { return this.nextRaw() / 32768; }
+-  public snapshot(): number { return this.state; }
++  private calls = 0;
++
++  public constructor(seed: number) {
++    this.state = seed >>> 0;
++  }
++
++  public nextRaw(): number {
++    this.state = (Math.imul(this.state, 214013) + 2531011) >>> 0;
++    this.calls++;
++    return (this.state >>> 16) & 0x7fff;
++  }
++
++  public nextInt(maxExclusive: number): number {
++    if (!Number.isInteger(maxExclusive) || maxExclusive <= 0) {
++      throw new RangeError(`maxExclusive must be a positive integer, got ${maxExclusive}`);
++    }
++    return this.nextRaw() % maxExclusive;
++  }
++
++  public nextFloat(): number {
++    return this.nextRaw() / 32768;
++  }
++
++  /** Backward-compatible raw-state accessor used by existing tests. */
++  public snapshot(): number {
++    return this.state;
++  }
++
++  public checkpoint(): MsvcRandomCheckpoint {
++    return { state: this.state, calls: this.calls };
++  }
++
++  public restore(checkpoint: MsvcRandomCheckpoint): void {
++    this.state = checkpoint.state >>> 0;
++    this.calls = checkpoint.calls;
++  }
++
++  public get callCount(): number {
++    return this.calls;
++  }
+ }
